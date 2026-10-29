@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Propmate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Propmate">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f1720'/%3E%3Crect x='20' y='55' width='14' height='25' fill='%2334d399'/%3E%3Crect x='43' y='35' width='14' height='45' fill='%2334d399'/%3E%3Crect x='66' y='20' width='14' height='60' fill='%2334d399'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0f1720;--card:#18222e;--card2:#1f2b39;--line:#2b3a4b;--text:#e8eef5;--mute:#8da0b3;
+  --green:#34d399;--amber:#fbbf24;--red:#f87171;--blue:#60a5fa;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding:calc(env(safe-area-inset-top) + 12px) 16px calc(88px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+h1{font-size:22px;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 12px}
+.banner{background:#3b2f10;border:1px solid #6b5416;color:#fde68a;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.seg{display:flex;background:var(--card);border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:transparent;color:var(--mute);padding:9px;border-radius:8px;font-size:15px;font-weight:600}
+.seg button.on{background:var(--card2);color:var(--text)}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--mute);padding:6px 12px;border-radius:999px;font-size:13px;white-space:nowrap}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#0b1220;font-weight:700}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;color:var(--mute)}
+.row input[type=range]{flex:1}
+.card{background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.pick{font-weight:700;font-size:16px}
+.meta{color:var(--mute);font-size:12px;margin-top:2px}
+.badge{font-weight:800;border-radius:8px;padding:4px 8px;font-size:14px;white-space:nowrap}
+.good{background:rgba(52,211,153,.15);color:var(--green)}
+.ok{background:rgba(251,191,36,.15);color:var(--amber)}
+.bad{background:rgba(248,113,113,.15);color:var(--red)}
+.hits{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.hit{font-size:11px;color:var(--mute)}
+.hit b{display:block;color:var(--text);font-size:14px}
+.bar{height:5px;background:var(--card2);border-radius:3px;margin-top:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--mute)}
+.foot>span:last-child{display:flex;gap:6px;white-space:nowrap}
+button.btn{border:0;background:var(--blue);color:#0b1220;font-weight:700;border-radius:9px;padding:8px 12px;font-size:14px}
+button.btn.ghost{background:var(--card2);color:var(--text)}
+button.btn.on{background:var(--green)}
+label{display:block;font-size:12px;color:var(--mute);margin:8px 0 4px}
+select,input[type=number],input[type=file],textarea{width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.metric{background:var(--card);border-radius:12px;padding:10px}
+.metric span{font-size:11px;color:var(--mute);display:block}
+.metric b{font-size:20px}
+svg{width:100%;height:auto;background:var(--card);border-radius:12px}
+.empty{color:var(--mute);text-align:center;padding:30px 0}
+.note{color:var(--mute);font-size:12px;margin-top:10px}
+nav{position:fixed;left:0;right:0;bottom:0;background:rgba(15,23,32,.95);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:5}
+nav button{flex:1;border:0;background:transparent;color:var(--mute);font-size:11px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:20px}
+nav button.on{color:var(--green)}
+.hidden{display:none}
+.legrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.x{border:0;background:transparent;color:var(--red);font-size:22px;padding:0 6px}
+</style>
+</head>
+<body>
+<h1>📊 Propmate</h1>
+<p class="sub">Prop research from game logs. Entertainment only, not betting advice.</p>
+<div id="banner" class="banner hidden"></div>
+
+<main>
+  <section id="tab-discover">
+    <div class="seg" id="sideSeg"><button data-side="over" class="on">Over</button><button data-side="under">Under</button></div>
+    <div class="chips" id="sportChips"></div>
+    <div class="row"><span>Min edge</span><input type="range" id="minEdge" min="-20" max="30" value="0"><b id="minEdgeLbl" style="color:var(--text)">0%</b></div>
+    <div id="board"></div>
+  </section>
+
+  <section id="tab-player" class="hidden">
+    <div class="grid2">
+      <div><label>Player</label><select id="pPlayer"></select></div>
+      <div><label>Stat</label><select id="pStat"></select></div>
+      <div><label>Line</label><input type="number" id="pLine" step="0.5" inputmode="decimal"></div>
+      <div><label>Odds (American)</label><input type="number" id="pOdds" step="5" inputmode="numeric"></div>
+    </div>
+    <div id="playerOut"></div>
+  </section>
+
+  <section id="tab-parlay" class="hidden">
+    <div id="parlayOut"></div>
+  </section>
+
+  <section id="tab-data" class="hidden">
+    <div class="card">
+      <b>Use your own data</b>
+      <p class="note" style="margin-top:6px">Load two CSV files. Data stays on this device.</p>
+      <label>props.csv &nbsp;(player,team,opponent,sport,stat,line,odds)</label>
+      <input type="file" id="fProps" accept=".csv,text/csv">
+      <label>game_logs.csv &nbsp;(player,stat,date,value)</label>
+      <input type="file" id="fLogs" accept=".csv,text/csv">
+      <p style="margin:12px 0 0"><button class="btn" id="loadBtn">Load files</button> <button class="btn ghost" id="resetBtn">Back to sample data</button></p>
+      <p class="note" id="dataMsg"></p>
+    </div>
+    <div class="card">
+      <b>How the numbers work</b>
+      <p class="note" style="margin-top:6px">
+        <b>Hit rate:</b> share of games clearing the line (pushes excluded).<br>
+        <b>Est. prob:</b> weighted blend of last 5/10/20 and season hit rates, shrunk toward 50% for small samples.<br>
+        <b>Implied:</b> probability from the odds, including the book's cut.<br>
+        <b>Edge:</b> est. prob minus implied. It only looks at past results: no matchups, injuries or minutes.<br>
+        <b>Parlays</b> assume independent legs.
+      </p>
+    </div>
+    <p class="note">Gamble responsibly. If gambling is a problem, call 1-800-GAMBLER.</p>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="discover" class="on"><span>🔥</span>Discover</button>
+  <button data-tab="player"><span>📈</span>Player</button>
+  <button data-tab="parlay"><span>🎟️</span>Parlay <b id="parlayCount"></b></button>
+  <button data-tab="data"><span>⚙️</span>Data</button>
+</nav>
+
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct = x => isNaN(x) ? '–' : Math.round(x * 100) + '%';
+const sgn = (x, d = 1) => (x >= 0 ? '+' : '') + (x * 100).toFixed(d) + '%';
+const fmtOdds = o => (o > 0 ? '+' : '') + o;
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+
+/* ---------- seeded random so sample data is stable ---------- */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function normal(rng) { const u = 1 - rng(), v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+
+/* ---------- sample data ---------- */
+const SAMPLE = [
+  ["Alex Rivera","BOS","NYK","NBA","Points",26.5,6.0],
+  ["Alex Rivera","BOS","NYK","NBA","Rebounds",7.2,2.5],
+  ["Jordan Banks","NYK","BOS","NBA","Assists",8.4,2.8],
+  ["Jordan Banks","NYK","BOS","NBA","Points",21.0,5.5],
+  ["Casey Moreno","DEN","LAL","NBA","Rebounds",11.3,3.0],
+  ["Casey Moreno","DEN","LAL","NBA","Points",24.0,5.0],
+  ["Devin Okafor","LAL","DEN","NBA","3-Pointers Made",3.1,1.6],
+  ["Sam Whitfield","KC","BUF","NFL","Passing Yards",268,52],
+  ["Sam Whitfield","KC","BUF","NFL","Pass TDs",2.0,1.1],
+  ["Marcus Lee","BUF","KC","NFL","Rushing Yards",74,28],
+  ["Terrell Grant","BUF","KC","NFL","Receiving Yards",82,30],
+  ["Nico Larsen","COL","VGK","NHL","Shots on Goal",3.6,1.5],
+  ["Ivan Petrov","VGK","COL","NHL","Points",0.9,0.9],
+];
+function sampleData() {
+  const rng = mulberry32(7), props = [], logs = {}, N = 30;
+  for (const [player, team, opp, sport, stat, mean, sd] of SAMPLE) {
+    let line = Math.round((mean + normal(rng) * sd * 0.25) * 2) / 2;
+    if (Number.isInteger(line)) line += 0.5;
+    const odds = [-130, -120, -115, -110, -105, 100, 110][Math.floor(rng() * 7)];
+    props.push({ player, team, opponent: opp, sport, stat, line, odds });
+    const r = mulberry32(hashStr(player + '|' + stat)), end = -0.4 + r() * 1.0, vals = [];
+    for (let i = 0; i < N; i++) {
+      const drift = (-0.3 + (end + 0.3) * i / (N - 1)) * sd;
+      vals.push(Math.max(0, Math.round(mean + normal(r) * sd + drift)));
+    }
+    logs[player + '|' + stat] = vals;
+  }
+  return { props, logs, sample: true };
+}
+
+/* ---------- engine (port of engine.py) ---------- */
+const impliedProb = o => o < 0 ? -o / (-o + 100) : 100 / (o + 100);
+const payout = o => o > 0 ? o / 100 : 100 / -o;
+const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const stdev = a => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
+function hitRate(vals, line, side) {
+  const v = vals.filter(x => x !== line);
+  if (!v.length) return NaN;
+  return v.filter(x => side === 'over' ? x > line : x < line).length / v.length;
+}
+function analyze(vals, line, odds, side) {
+  const o = { games: vals.length, avg: mean(vals), median: median(vals), sd: stdev(vals) };
+  for (const w of [5, 10, 20]) { o['hit' + w] = hitRate(vals.slice(-w), line, side); o['avg' + w] = mean(vals.slice(-w)); }
+  o.hitS = hitRate(vals, line, side);
+  o.trend = (o.avg5 - o.avg) / (o.sd || 1);
+  let streak = 0;
+  for (let i = vals.length - 1; i >= 0; i--) { const c = side === 'over' ? vals[i] > line : vals[i] < line; if (c) streak++; else break; }
+  o.streak = streak;
+  const W = { hit5: .25, hit10: .35, hit20: .2, hitS: .2 };
+  let num = 0, den = 0;
+  for (const k in W) if (!isNaN(o[k])) { num += o[k] * W[k]; den += W[k]; }
+  const raw = den ? num / den : .5, n = o.games;
+  o.est = .5 + (raw - .5) * (n / (n + 10));
+  o.implied = impliedProb(odds);
+  o.edge = o.est - o.implied;
+  o.ev = o.est * payout(odds) - (1 - o.est);
+  return o;
+}
+function buildBoard(data, side) {
+  const rows = [];
+  for (const p of data.props) {
+    const vals = data.logs[p.player + '|' + p.stat];
+    if (!vals || vals.length < 8) continue;
+    rows.push({ ...p, side, key: p.player + '|' + p.stat, ...analyze(vals, p.line, p.odds, side) });
+  }
+  return rows.sort((a, b) => b.edge - a.edge);
+}
+function parlay(legs) {
+  if (!legs.length) return null;
+  const dec = legs.reduce((m, l) => m * (1 + payout(l.odds)), 1), prob = legs.reduce((m, l) => m * l.est, 1);
+  return { n: legs.length, dec, prob, ev: prob * (dec - 1) - (1 - prob) };
+}
+
+/* ---------- state ---------- */
+let DATA = store.get('propmate.data') || sampleData();
+const S = { side: 'over', sports: null, minEdge: 0, parlay: store.get('propmate.parlay') || [] };
+
+/* ---------- discover ---------- */
+const edgeClass = e => e >= .05 ? 'good' : e > 0 ? 'ok' : 'bad';
+function renderChips() {
+  const sports = [...new Set(DATA.props.map(p => p.sport))].sort();
+  if (!S.sports) S.sports = new Set(sports);
+  $('#sportChips').innerHTML = sports.map(s => `<button class="chip ${S.sports.has(s) ? 'on' : ''}" data-sport="${esc(s)}">${esc(s)}</button>`).join('');
+}
+function renderBoard() {
+  const rows = buildBoard(DATA, S.side).filter(r => S.sports.has(r.sport) && r.edge * 100 >= S.minEdge);
+  if (!rows.length) { $('#board').innerHTML = '<div class="empty">No props match these filters.</div>'; return; }
+  $('#board').innerHTML = rows.map(r => {
+    const inP = S.parlay.some(k => k === r.key + '|' + r.side);
+    const hit = (lbl, v) => `<div class="hit">${lbl}<b>${pct(v)}</b><div class="bar"><i style="width:${isNaN(v) ? 0 : v * 100}%"></i></div></div>`;
+    return `<div class="card">
+      <div class="top"><div><div class="pick">${esc(r.player)} ${r.side.toUpperCase()} ${r.line} ${esc(r.stat)}</div>
+        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}</div></div>
+        <div class="badge ${edgeClass(r.edge)}">${sgn(r.edge)}</div></div>
+      <div class="hits">${hit('L5', r.hit5)}${hit('L10', r.hit10)}${hit('L20', r.hit20)}${hit('Season', r.hitS)}</div>
+      <div class="foot"><span>Est ${pct(r.est)} vs implied ${pct(r.implied)} · streak ${r.streak}</span>
+        <span><button class="btn ghost" data-open="${esc(r.key)}">Details</button>
+        <button class="btn ${inP ? 'on' : ''}" data-leg="${esc(r.key)}">${inP ? '✓ Added' : '+ Parlay'}</button></span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- player ---------- */
+function fillPlayers() {
+  const players = [...new Set(DATA.props.map(p => p.player))].sort();
+  $('#pPlayer').innerHTML = players.map(p => `<option>${esc(p)}</option>`).join('');
+  fillStats();
+}
+function fillStats(preferStat) {
+  const stats = DATA.props.filter(p => p.player === $('#pPlayer').value).map(p => p.stat);
+  $('#pStat').innerHTML = stats.map(s => `<option>${esc(s)}</option>`).join('');
+  if (preferStat && stats.includes(preferStat)) $('#pStat').value = preferStat;
+  syncLine();
+}
+function syncLine() {
+  const p = DATA.props.find(p => p.player === $('#pPlayer').value && p.stat === $('#pStat').value);
+  if (p) { $('#pLine').value = p.line; $('#pOdds').value = p.odds; }
+  renderPlayer();
+}
+function renderPlayer() {
+  const player = $('#pPlayer').value, stat = $('#pStat').value;
+  const vals = DATA.logs[player + '|' + stat];
+  const line = parseFloat($('#pLine').value), odds = parseInt($('#pOdds').value, 10);
+  if (!vals || !vals.length || isNaN(line) || isNaN(odds) || odds === 0 || (odds > -100 && odds < 100)) {
+    $('#playerOut').innerHTML = '<div class="empty">Enter a valid line and American odds (like -110 or +120).</div>'; return;
+  }
+  const a = analyze(vals, line, odds, S.side);
+  const m = (l, v, cls = '') => `<div class="metric"><span>${l}</span><b class="${cls}" style="${cls ? '' : ''}">${v}</b></div>`;
+  const shown = vals.slice(-20), max = Math.max(...shown, line) * 1.15 || 1, W = 320, H = 150, bw = W / shown.length;
+  const bars = shown.map((v, i) => {
+    const clear = S.side === 'over' ? v > line : v < line, h = v / max * (H - 20);
+    return `<rect x="${i * bw + 2}" y="${H - h}" width="${bw - 4}" height="${h}" rx="2" fill="${clear ? '#34d399' : '#f87171'}" opacity=".85"/>`;
+  }).join('');
+  const ly = H - line / max * (H - 20);
+  $('#playerOut').innerHTML = `
+    <div class="metrics">
+      ${m('Est. hit prob', pct(a.est))}${m('Implied', pct(a.implied))}${m('Edge', sgn(a.edge))}
+      ${m('EV / unit', (a.ev >= 0 ? '+' : '') + a.ev.toFixed(2))}${m('Streak', a.streak)}${m('Trend', (a.trend >= 0 ? '+' : '') + a.trend.toFixed(2) + 'σ')}
+    </div>
+    <div class="metrics">${m('Hit L5', pct(a.hit5))}${m('Hit L10', pct(a.hit10))}${m('Hit L20', pct(a.hit20))}</div>
+    <svg viewBox="0 0 ${W} ${H + 6}" role="img" aria-label="Last ${shown.length} games against the line">${bars}
+      <line x1="0" x2="${W}" y1="${ly}" y2="${ly}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="4" y="${Math.max(ly - 4, 12)}" fill="#fbbf24" font-size="10">line ${line}</text></svg>
+    <p class="note">Last ${shown.length} games (green = cleared). Avg ${a.avg.toFixed(1)} · median ${a.median.toFixed(1)} · last-5 avg ${a.avg5.toFixed(1)} · ${a.games} games.</p>`;
+}
+
+/* ---------- parlay ---------- */
+function renderParlay() {
+  $('#parlayCount').textContent = S.parlay.length ? '(' + S.parlay.length + ')' : '';
+  const board = buildBoard(DATA, 'over').concat(buildBoard(DATA, 'under'));
+  const legs = S.parlay.map(k => board.find(r => r.key + '|' + r.side === k)).filter(Boolean);
+  if (!legs.length) { $('#parlayOut').innerHTML = '<div class="empty">Add legs from the Discover tab.</div>'; return; }
+  const p = parlay(legs), stake = parseFloat(($('#stake') || {}).value) || 10;
+  $('#parlayOut').innerHTML = legs.map(l => `<div class="card legrow"><div><div class="pick" style="font-size:15px">${esc(l.player)} ${l.side.toUpperCase()} ${l.line} ${esc(l.stat)}</div>
+      <div class="meta">${fmtOdds(l.odds)} · est ${pct(l.est)} · edge ${sgn(l.edge)}</div></div>
+      <button class="x" data-rm="${esc(l.key + '|' + l.side)}" aria-label="Remove leg">×</button></div>`).join('') +
+    `<label>Stake</label><input type="number" id="stake" value="${stake}" step="1" inputmode="decimal">
+    <div class="metrics">
+      <div class="metric"><span>Legs</span><b>${p.n}</b></div>
+      <div class="metric"><span>Payout</span><b>${p.dec.toFixed(2)}x</b></div>
+      <div class="metric"><span>Win prob</span><b>${(p.prob * 100).toFixed(1)}%</b></div>
+      <div class="metric"><span>To win</span><b>${(stake * (p.dec - 1)).toFixed(2)}</b></div>
+      <div class="metric"><span>Exp. value</span><b>${(p.ev * stake >= 0 ? '+' : '') + (p.ev * stake).toFixed(2)}</b></div>
+    </div>
+    <p class="note">Assumes legs are independent. Same-game legs are usually correlated, so treat this as a rough guide.</p>
+    <button class="btn ghost" id="clearParlay">Clear parlay</button>`;
+}
+
+/* ---------- csv import ---------- */
+function parseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; if (row.some(x => x.trim() !== '')) rows.push(row); row = []; }
+    else cur += c;
+  }
+  row.push(cur); if (row.some(x => x.trim() !== '')) rows.push(row);
+  const head = rows.shift().map(h => h.trim().toLowerCase());
+  return rows.map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] || '').trim()])));
+}
+const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(f); });
+async function loadFiles() {
+  const msg = $('#dataMsg'), fp = $('#fProps').files[0], fl = $('#fLogs').files[0];
+  if (!fp || !fl) { msg.textContent = 'Choose both files first.'; return; }
+  try {
+    const P = parseCSV(await readFile(fp)), L = parseCSV(await readFile(fl));
+    const need = (rows, cols, name) => { for (const c of cols) if (!rows.length || !(c in rows[0])) throw new Error(name + ' is missing the "' + c + '" column'); };
+    need(P, ['player', 'team', 'opponent', 'sport', 'stat', 'line', 'odds'], 'props.csv');
+    need(L, ['player', 'stat', 'date', 'value'], 'game_logs.csv');
+    const props = P.map(r => ({ player: r.player, team: r.team, opponent: r.opponent, sport: r.sport, stat: r.stat, line: parseFloat(r.line), odds: parseInt(r.odds, 10) }))
+      .filter(p => !isNaN(p.line) && !isNaN(p.odds) && p.odds !== 0);
+    const grouped = {};
+    for (const r of L) { const v = parseFloat(r.value); if (!isNaN(v)) (grouped[r.player + '|' + r.stat] = grouped[r.player + '|' + r.stat] || []).push({ d: r.date, v }); }
+    const logs = {};
+    for (const k in grouped) logs[k] = grouped[k].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0).map(x => x.v);
+    if (!props.length) throw new Error('No valid rows in props.csv');
+    DATA = { props, logs, sample: false };
+    store.set('propmate.data', DATA); store.set('propmate.parlay', []); S.parlay = []; S.sports = null;
+    msg.textContent = 'Loaded ' + props.length + ' props.';
+    refreshAll();
+  } catch (e) { msg.textContent = 'Could not load: ' + e.message; }
+}
+
+/* ---------- wiring ---------- */
+function showTab(t) {
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + t));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  if (t === 'parlay') renderParlay();
+  window.scrollTo(0, 0);
+}
+function refreshAll() {
+  const b = $('#banner');
+  b.classList.toggle('hidden', !DATA.sample);
+  b.innerHTML = 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
+  renderChips(); renderBoard(); fillPlayers(); renderParlay();
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.tab) showTab(t.dataset.tab);
+  else if (t.dataset.side) { S.side = t.dataset.side; document.querySelectorAll('#sideSeg button').forEach(b => b.classList.toggle('on', b === t)); renderBoard(); renderPlayer(); }
+  else if (t.dataset.sport) { const s = t.dataset.sport; S.sports.has(s) ? S.sports.delete(s) : S.sports.add(s); renderChips(); renderBoard(); }
+  else if (t.dataset.leg) { const k = t.dataset.leg + '|' + S.side, i = S.parlay.indexOf(k); i >= 0 ? S.parlay.splice(i, 1) : S.parlay.push(k); store.set('propmate.parlay', S.parlay); renderBoard(); renderParlay(); }
+  else if (t.dataset.open) { const [pl, st] = t.dataset.open.split('|'); $('#pPlayer').value = pl; fillStats(st); showTab('player'); }
+  else if (t.dataset.rm) { S.parlay = S.parlay.filter(k => k !== t.dataset.rm); store.set('propmate.parlay', S.parlay); renderParlay(); renderBoard(); }
+  else if (t.id === 'clearParlay') { S.parlay = []; store.set('propmate.parlay', []); renderParlay(); renderBoard(); }
+  else if (t.id === 'loadBtn') loadFiles();
+  else if (t.id === 'resetBtn') { store.del('propmate.data'); store.del('propmate.parlay'); DATA = sampleData(); S.parlay = []; S.sports = null; $('#dataMsg').textContent = 'Back on sample data.'; refreshAll(); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'minEdge') { S.minEdge = +e.target.value; $('#minEdgeLbl').textContent = S.minEdge + '%'; renderBoard(); }
+  else if (e.target.id === 'pLine' || e.target.id === 'pOdds') renderPlayer();
+  else if (e.target.id === 'stake') { renderParlay(); $('#stake').focus(); }
+});
+$('#pPlayer').addEventListener('change', () => fillStats());
+$('#pStat').addEventListener('change', syncLine);
+refreshAll();
+</script>
+</body>
+</html>
