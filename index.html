@@ -251,7 +251,7 @@ function renderBoard() {
     const hit = (lbl, v) => `<div class="hit">${lbl}<b>${pct(v)}</b><div class="bar"><i style="width:${isNaN(v) ? 0 : v * 100}%"></i></div></div>`;
     return `<div class="card">
       <div class="top"><div><div class="pick">${esc(r.player)} ${r.side.toUpperCase()} ${r.line} ${esc(r.stat)}</div>
-        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}</div></div>
+        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}${r.inj ? ' · <span style="color:#fbbf24">⚠ ' + esc(r.inj) + '</span>' : ''}</div></div>
         <div class="badge ${edgeClass(r.edge)}">${sgn(r.edge)}</div></div>
       <div class="hits">${hit('L5', r.hit5)}${hit('L10', r.hit10)}${hit('L20', r.hit20)}${hit('Season', r.hitS)}</div>
       <div class="foot"><span>Est ${pct(r.est)} vs implied ${pct(r.implied)} · streak ${r.streak}</span>
@@ -423,11 +423,14 @@ async function loadLive(setMsg) {
     const rows = [...(g0 ? gameRows(g0) : []), ...gameRows(g1)];
     const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
   });
+  const inj = {};
+  try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) if (q.espn_id && q.injury_status) inj[q.espn_id] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
   const props = [], logs = {};
   for (const g of pairs) {
     const p = info[g.id]; if (!p || !p.name || p.rows.length < 8) continue;
+    if (/^(out|ir)/i.test(inj[g.id] || '')) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: inj[g.id] || '' });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
