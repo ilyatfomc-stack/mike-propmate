@@ -99,6 +99,12 @@ nav button.on{color:var(--green)}
 
   <section id="tab-data" class="hidden">
     <div class="card">
+      <b>Live NBA data (free)</b>
+      <p class="note" style="margin-top:6px">Pulls tonight's DraftKings prop lines and recent game logs from ESPN. No key needed. Unofficial source, so it may break. Over and under odds are matched by order and not verified.</p>
+      <p style="margin:12px 0 0"><button class="btn" id="liveBtn">Load live NBA data</button></p>
+      <p class="note" id="liveMsg"></p>
+    </div>
+    <div class="card">
       <b>Use your own data</b>
       <p class="note" style="margin-top:6px">Load two CSV files. Data stays on this device.</p>
       <label>props.csv &nbsp;(player,team,opponent,sport,stat,line,odds)</label>
@@ -215,7 +221,8 @@ function buildBoard(data, side) {
   for (const p of data.props) {
     const vals = data.logs[p.player + '|' + p.stat];
     if (!vals || vals.length < 8) continue;
-    rows.push({ ...p, side, key: p.player + '|' + p.stat, ...analyze(vals, p.line, p.odds, side) });
+    const od = side === 'under' && p.oddsUnder ? p.oddsUnder : p.odds;
+    rows.push({ ...p, odds: od, side, key: p.player + '|' + p.stat, ...analyze(vals, p.line, od, side) });
   }
   return rows.sort((a, b) => b.edge - a.edge);
 }
@@ -268,7 +275,7 @@ function fillStats(preferStat) {
 }
 function syncLine() {
   const p = DATA.props.find(p => p.player === $('#pPlayer').value && p.stat === $('#pStat').value);
-  if (p) { $('#pLine').value = p.line; $('#pOdds').value = p.odds; }
+  if (p) { $('#pLine').value = p.line; $('#pOdds').value = (S.side === 'under' && p.oddsUnder) ? p.oddsUnder : p.odds; }
   renderPlayer();
 }
 function renderPlayer() {
@@ -359,6 +366,84 @@ async function loadFiles() {
   } catch (e) { msg.textContent = 'Could not load: ' + e.message; }
 }
 
+
+/* ---------- live data (free ESPN endpoints, unofficial) ---------- */
+const LIVE_TYPES = { 'Total Points': 'Points', 'Total Rebounds': 'Rebounds', 'Total Assists': 'Assists', 'Total 3-Point Field Goals': '3-Pointers Made', 'Total Steals': 'Steals', 'Total Blocks': 'Blocks', 'Total Points, Rebounds, and Assists': 'Pts+Reb+Ast' };
+async function pool(items, n, fn) {
+  const out = new Array(items.length); let i = 0;
+  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { const k = i++; try { out[k] = await fn(items[k]); } catch (e) { out[k] = null; } } }));
+  return out;
+}
+const jget = async u => { const r = await fetch(u.replace('http://', 'https://')); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+function gameRows(g) {
+  const nm = g.names || [], ix = k => nm.indexOf(k), rows = [];
+  for (const st of g.seasonTypes || []) {
+    if (/pre/i.test(st.displayName || '')) continue;
+    for (const c of st.categories || []) for (const ev of c.events || []) {
+      const meta = (g.events || {})[ev.eventId]; if (!meta || !meta.gameDate) continue;
+      const s = ev.stats, num = k => parseFloat(s[ix(k)]);
+      const tp = String(s[ix('threePointFieldGoalsMade-threePointFieldGoalsAttempted')] || '').split('-')[0];
+      const pts = num('points'), reb = num('totalRebounds'), ast = num('assists');
+      if ([pts, reb, ast].some(isNaN)) continue;
+      rows.push({ d: meta.gameDate, 'Points': pts, 'Rebounds': reb, 'Assists': ast, '3-Pointers Made': parseFloat(tp), 'Steals': num('steals'), 'Blocks': num('blocks'), 'Pts+Reb+Ast': pts + reb + ast });
+    }
+  }
+  return rows;
+}
+async function loadLive(setMsg) {
+  const sb = await jget('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
+  const games = (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
+  if (!games.length) throw new Error('No upcoming NBA games found right now.');
+  const teams = {};
+  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation }; } }
+  setMsg('Found ' + games.length + ' games. Loading prop lines...');
+  const groups = {};
+  for (const e of games) {
+    const base = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/' + e.id + '/competitions/' + e.id + '/odds/100/propBets?lang=en&region=us&limit=200';
+    const first = await jget(base + '&page=1'), pages = first.pageCount || 1;
+    const rest = await pool(Array.from({ length: pages - 1 }, (_, i) => i + 2), 4, p => jget(base + '&page=' + p));
+    for (const pg of [first, ...rest.filter(Boolean)]) for (const it of pg.items || []) {
+      const stat = LIVE_TYPES[it.type && it.type.name]; if (!stat || !it.athlete) continue;
+      const id = it.athlete.$ref.split('/athletes/')[1].split('?')[0];
+      const line = parseFloat(it.odds.total.value), odds = parseInt(it.odds.american.value, 10);
+      if (isNaN(line) || isNaN(odds)) continue;
+      (groups[id + '|' + stat + '|' + line] = groups[id + '|' + stat + '|' + line] || { id, stat, line, o: [] }).o.push(odds);
+    }
+  }
+  const pairs = Object.values(groups).filter(g => g.o.length === 2);
+  const ids = [...new Set(pairs.map(g => g.id))];
+  setMsg('Loading ' + ids.length + ' players...');
+  const info = {}, season = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
+  await pool(ids, 6, async id => {
+    const [a, g1, g0] = await Promise.all([
+      jget('https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes/' + id + '?lang=en&region=us'),
+      jget('https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/' + id + '/gamelog'),
+      jget('https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/' + id + '/gamelog?season=' + (season - 1)).catch(() => null)]);
+    const tid = a.team && a.team.$ref ? (a.team.$ref.match(/teams\/(\d+)/) || [])[1] : null;
+    const rows = [...(g0 ? gameRows(g0) : []), ...gameRows(g1)];
+    const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
+  });
+  const props = [], logs = {};
+  for (const g of pairs) {
+    const p = info[g.id]; if (!p || !p.name || p.rows.length < 8) continue;
+    const t = teams[p.tid] || { abbr: '', opp: '' };
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true });
+    logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
+  }
+  if (!props.length) throw new Error('No props could be built.');
+  return { props, logs, sample: false, live: true, loadedAt: new Date().toISOString() };
+}
+async function doLive() {
+  const msg = $('#liveMsg'), btn = $('#liveBtn'); btn.disabled = true; msg.textContent = 'Starting...';
+  try {
+    DATA = await loadLive(m => { msg.textContent = m; });
+    store.set('propmate.data', DATA); store.set('propmate.parlay', []); S.parlay = []; S.sports = null;
+    msg.textContent = 'Loaded ' + DATA.props.length + ' live props. Open the Discover tab.';
+    refreshAll();
+  } catch (e) { msg.textContent = 'Could not load live data: ' + e.message; }
+  btn.disabled = false;
+}
+
 /* ---------- wiring ---------- */
 function showTab(t) {
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + t));
@@ -368,8 +453,8 @@ function showTab(t) {
 }
 function refreshAll() {
   const b = $('#banner');
-  b.classList.toggle('hidden', !DATA.sample);
-  b.innerHTML = 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
+  b.classList.toggle('hidden', !DATA.sample && !DATA.live);
+  b.innerHTML = DATA.live ? 'Showing <b>live NBA data</b> (ESPN / DraftKings). Over/under odds order unverified.' : 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
   renderChips(); renderBoard(); fillPlayers(); renderParlay();
 }
 document.addEventListener('click', e => {
@@ -382,6 +467,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.rm) { S.parlay = S.parlay.filter(k => k !== t.dataset.rm); store.set('propmate.parlay', S.parlay); renderParlay(); renderBoard(); }
   else if (t.id === 'clearParlay') { S.parlay = []; store.set('propmate.parlay', []); renderParlay(); renderBoard(); }
   else if (t.id === 'loadBtn') loadFiles();
+  else if (t.id === 'liveBtn') doLive();
   else if (t.id === 'resetBtn') { store.del('propmate.data'); store.del('propmate.parlay'); DATA = sampleData(); S.parlay = []; S.sports = null; $('#dataMsg').textContent = 'Back on sample data.'; refreshAll(); }
 });
 document.addEventListener('input', e => {
