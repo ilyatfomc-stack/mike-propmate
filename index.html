@@ -478,6 +478,14 @@ document.addEventListener('input', e => {
 $('#pPlayer').addEventListener('change', () => fillStats());
 $('#pStat').addEventListener('change', syncLine);
 refreshAll();
+/* auto-refresh live data on open (skips your own CSV data) */
+(function autoLive() {
+  if (!DATA.sample && !DATA.live) return;
+  const age = DATA.loadedAt ? Date.now() - Date.parse(DATA.loadedAt) : Infinity;
+  if (age < 20 * 60 * 1000) return;
+  const b = $('#banner'); b.classList.remove('hidden'); b.innerHTML = 'Loading <b>live NBA data</b>...';
+  doLive().then(() => { if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
+})();
 </script>
 </body>
 </html>
