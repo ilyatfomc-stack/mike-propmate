@@ -126,12 +126,63 @@ nav button.on{color:var(--green)}
     </div>
     <p class="note">Gamble responsibly. If gambling is a problem, call 1-800-GAMBLER.</p>
   </section>
+  <section id="tab-legend" class="hidden">
+    <div class="card">
+      <b>Reading a play card</b>
+      <p class="note" style="margin-top:6px">
+        <b>OVER / UNDER 18.5 Points:</b> the pick. Over means the player finishes above the line, under means below. The line always ends in .5, so there are no ties.<br>
+        <b>CLE vs ATL · NBA · -119:</b> his team vs tonight's opponent, then the sportsbook odds for that side (American odds).<br>
+        <b>Colored badge:</b> the edge. <span class="badge good">+8.2%</span> green is 5% or more, <span class="badge ok">+2.0%</span> amber is above 0, <span class="badge bad">-3.0%</span> red is negative.<br>
+        <b>L5 / L10 / L20 / Season:</b> how often he cleared this line in his last 5, 10 and 20 games, and across all games loaded. Live data includes last season too.<br>
+        <b>Est vs implied:</b> our estimated chance of hitting vs the chance the odds imply. The gap is the edge.<br>
+        <b>Streak:</b> games in a row he has cleared the line, counting back from his latest game.<br>
+        <b>+ Parlay / Details:</b> add the play to your parlay, or open the Player tab for a game-by-game chart.
+      </p>
+    </div>
+    <div class="card">
+      <b>The numbers</b>
+      <p class="note" style="margin-top:6px">
+        <b>Est. prob:</b> a blend of his hit rates (last 5 counts most, then 10, 20 and season), pulled toward 50% when there are few games.<br>
+        <b>Implied:</b> the chance built into the odds. It includes the sportsbook's cut, so over and under don't add to 100%.<br>
+        <b>Edge:</b> est. prob minus implied. Positive means we think the bet is priced too low.<br>
+        <b>EV / unit:</b> expected profit per 1 unit staked, if our estimate is right.<br>
+        <b>Trend:</b> his last-5 average vs his normal, in standard deviations. Positive means running hot.
+      </p>
+    </div>
+    <div class="card">
+      <b>Extra lines under the odds (live data)</b>
+      <p class="note" style="margin-top:6px">
+        <b>Min L5 35.6 vs 31.2 avg:</b> minutes per game over his last 5 games vs his last 20. Green is up 3 or more, red is down 3 or more.<br>
+        <b>Est. +7.1% for minutes:</b> the estimate was nudged for the minutes change. More minutes helps an over, fewer minutes helps an under. Capped at 8 points.<br>
+        <b>Line 22.5 → 24.5 ▲:</b> the line has moved from where it opened. Up means the book expects more. Down means less.<br>
+        <b>Back-to-back:</b> his team played yesterday. If he has 3 or more past back-to-backs it also shows his average on them vs rested.<br>
+        <b>⚠ GTD / DTD:</b> injury flag. GTD is a game-time decision and DTD is day-to-day. The body part is in brackets. Players listed Out or on IR are left off the board.
+      </p>
+    </div>
+    <div class="card">
+      <b>Parlays</b>
+      <p class="note" style="margin-top:6px">
+        <b>Payout multiple:</b> what a winning parlay returns per 1 staked, including the stake.<br>
+        <b>Est. win prob:</b> our chances of all legs hitting, treating legs as unrelated. Legs from the same game often move together, so treat this as a rough guide.
+      </p>
+    </div>
+    <div class="card">
+      <b>Where the data comes from</b>
+      <p class="note" style="margin-top:6px">
+        Lines and odds: DraftKings via ESPN. Game logs and minutes: ESPN. Injuries: Sleeper. All free and unofficial, so they can be late or wrong, and a late scratch may not show up yet.<br>
+        The over and under odds are matched by order from ESPN and haven't been verified against DraftKings.<br>
+        The model only looks at past results and minutes. It does not know matchups, pace, or teammates' injuries.
+      </p>
+    </div>
+    <p class="note">Entertainment only, not betting advice. Gamble responsibly. If gambling is a problem, call 1-800-GAMBLER.</p>
+  </section>
 </main>
 
 <nav>
   <button data-tab="discover" class="on"><span>🔥</span>Discover</button>
   <button data-tab="player"><span>📈</span>Player</button>
   <button data-tab="parlay"><span>🎟️</span>Parlay <b id="parlayCount"></b></button>
+  <button data-tab="legend"><span>📖</span>Legend</button>
   <button data-tab="data"><span>⚙️</span>Data</button>
 </nav>
 
