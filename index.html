@@ -251,7 +251,7 @@ function renderBoard() {
     const hit = (lbl, v) => `<div class="hit">${lbl}<b>${pct(v)}</b><div class="bar"><i style="width:${isNaN(v) ? 0 : v * 100}%"></i></div></div>`;
     return `<div class="card">
       <div class="top"><div><div class="pick">${esc(r.player)} ${r.side.toUpperCase()} ${r.line} ${esc(r.stat)}</div>
-        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}${r.inj ? ' · <span style="color:#fbbf24">⚠ ' + esc(r.inj) + '</span>' : ''}</div></div>
+        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}${r.inj ? ' · <span style="color:#fbbf24">⚠ ' + esc(r.inj) + '</span>' : ''}</div>${ctxHtml(r)}</div>
         <div class="badge ${edgeClass(r.edge)}">${sgn(r.edge)}</div></div>
       <div class="hits">${hit('L5', r.hit5)}${hit('L10', r.hit10)}${hit('L20', r.hit20)}${hit('Season', r.hitS)}</div>
       <div class="foot"><span>Est ${pct(r.est)} vs implied ${pct(r.implied)} · streak ${r.streak}</span>
@@ -293,7 +293,8 @@ function renderPlayer() {
     return `<rect x="${i * bw + 2}" y="${H - h}" width="${bw - 4}" height="${h}" rx="2" fill="${clear ? '#34d399' : '#f87171'}" opacity=".85"/>`;
   }).join('');
   const ly = H - line / max * (H - 20);
-  $('#playerOut').innerHTML = `
+  const cp = DATA.props.find(x => x.player === player && x.stat === stat) || {};
+  $('#playerOut').innerHTML = ctxHtml(cp) + `
     <div class="metrics">
       ${m('Est. hit prob', pct(a.est))}${m('Implied', pct(a.implied))}${m('Edge', sgn(a.edge))}
       ${m('EV / unit', (a.ev >= 0 ? '+' : '') + a.ev.toFixed(2))}${m('Streak', a.streak)}${m('Trend', (a.trend >= 0 ? '+' : '') + a.trend.toFixed(2) + 'σ')}
@@ -385,17 +386,32 @@ function gameRows(g) {
       const tp = String(s[ix('threePointFieldGoalsMade-threePointFieldGoalsAttempted')] || '').split('-')[0];
       const pts = num('points'), reb = num('totalRebounds'), ast = num('assists');
       if ([pts, reb, ast].some(isNaN)) continue;
-      rows.push({ d: meta.gameDate, 'Points': pts, 'Rebounds': reb, 'Assists': ast, '3-Pointers Made': parseFloat(tp), 'Steals': num('steals'), 'Blocks': num('blocks'), 'Pts+Reb+Ast': pts + reb + ast });
+      rows.push({ d: meta.gameDate, 'Points': pts, 'Rebounds': reb, 'Assists': ast, '3-Pointers Made': parseFloat(tp), 'Steals': num('steals'), 'Blocks': num('blocks'), 'Pts+Reb+Ast': pts + reb + ast, m: num('minutes') });
     }
   }
   return rows;
+}
+function liveCtx(rows, stat, tonight) {
+  const n = rows.length, avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN, r1 = x => isFinite(x) ? Math.round(x * 10) / 10 : null;
+  const mins = rows.map(r => r.m).filter(x => isFinite(x));
+  const H36 = 36 * 3600e3, t = tonight ? Date.parse(tonight) : NaN;
+  const bv = [], nv = [];
+  rows.forEach((r, i) => { if (i && Date.parse(r.d) - Date.parse(rows[i - 1].d) < H36) bv.push(r[stat]); else nv.push(r[stat]); });
+  return { minL5: r1(avg(mins.slice(-5))), minAvg: r1(avg(mins.slice(-20))), b2b: isFinite(t) && t - Date.parse(rows[n - 1].d) < H36, b2bN: bv.length, b2bAvg: r1(avg(bv)), restAvg: r1(avg(nv)) };
+}
+function ctxHtml(p) {
+  const f = x => typeof x === 'number' && isFinite(x), bits = [];
+  if (f(p.minL5) && f(p.minAvg)) { const d = p.minL5 - p.minAvg, c = d <= -3 ? '#f87171' : d >= 3 ? '#34d399' : 'inherit'; bits.push('<span style="color:' + c + '">Min L5 ' + p.minL5.toFixed(1) + ' vs ' + p.minAvg.toFixed(1) + ' avg</span>'); }
+  if (f(p.open) && p.open !== p.line) bits.push('Line ' + p.open + ' → ' + p.line + (p.line > p.open ? ' ▲' : ' ▼'));
+  if (p.b2b) bits.push('<span style="color:#fbbf24">Back-to-back' + (p.b2bN >= 3 && f(p.b2bAvg) && f(p.restAvg) ? ' (avg ' + p.b2bAvg + ' on B2B vs ' + p.restAvg + ' rested)' : '') + '</span>');
+  return bits.length ? '<div class="meta" style="margin-top:4px">' + bits.join(' · ') + '</div>' : '';
 }
 async function loadLive(setMsg) {
   const sb = await jget('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
   const games = (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
   if (!games.length) throw new Error('No upcoming NBA games found right now.');
   const teams = {};
-  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation }; } }
+  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation, date: e.date }; } }
   setMsg('Found ' + games.length + ' games. Loading prop lines...');
   const groups = {};
   for (const e of games) {
@@ -407,7 +423,7 @@ async function loadLive(setMsg) {
       const id = it.athlete.$ref.split('/athletes/')[1].split('?')[0];
       const line = parseFloat(it.odds.total.value), odds = parseInt(it.odds.american.value, 10);
       if (isNaN(line) || isNaN(odds)) continue;
-      (groups[id + '|' + stat + '|' + line] = groups[id + '|' + stat + '|' + line] || { id, stat, line, o: [] }).o.push(odds);
+      (groups[id + '|' + stat + '|' + line] = groups[id + '|' + stat + '|' + line] || { id, stat, line, open: parseFloat(it.odds.total.open), o: [] }).o.push(odds);
     }
   }
   const pairs = Object.values(groups).filter(g => g.o.length === 2);
@@ -431,7 +447,7 @@ async function loadLive(setMsg) {
     const ij = inj[nk(p.name)] || '';
     if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date) });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
