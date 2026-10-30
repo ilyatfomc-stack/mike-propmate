@@ -160,7 +160,8 @@ nav button.on{color:var(--green)}
         <b>Home 22.1 · Away 18.4 avg:</b> his average for this stat at home vs on the road. Tonight's venue is bold. Needs 3 or more games each way.<br>
         <b>vs ORL 21.0 avg in 3 games:</b> his average against tonight's opponent, shown with 2 or more games, next to his overall average.<br>
         <b>Spread -3.5 · Total 220.5:</b> the game line from his team's side. Minus means his team is favored. A spread of 10 or more shows Blowout risk, since starters may sit late.<br>
-        <b>Teammates out:</b> notable teammates ruled out tonight. Their shots and minutes often go to others.
+        <b>Teammates out:</b> notable teammates ruled out tonight. Their shots and minutes often go to others.<br>
+        <b>Opp allows 124.0 PPG · Soft D:</b> points per game tonight's opponent gives up (points and pts+reb+ast plays only). Early in the season it also shows last year's number. Soft D means one of the 8 most generous defenses, Tough D one of the 8 stingiest. This is a blend of this season and last, and it does not adjust for the opponent's schedule.
       </p>
     </div>
     <div class="card">
@@ -477,6 +478,7 @@ function ctxHtml(p) {
   if (p.vsN >= 2 && f(p.vsAvg)) m2.push('vs ' + p.opponent + ' ' + p.vsAvg + ' avg in ' + p.vsN + ' games (overall ' + p.allAvg + ')');
   if (f(p.spread) || f(p.total)) { const big = f(p.spread) && Math.abs(p.spread) >= 10; m2.push('Spread ' + (f(p.spread) ? (p.spread > 0 ? '+' : '') + p.spread : '–') + (f(p.total) ? ' · Total ' + p.total : '') + (big ? ' <span style="color:#fbbf24">Blowout risk</span>' : '')); }
   if (p.tm && p.tm.length) m2.push('<span style="color:#fbbf24">Teammates out: ' + p.tm.map(esc).join(', ') + '</span>');
+  if (p.def && f(p.def.cur)) m2.push('Opp allows ' + p.def.cur.toFixed(1) + ' PPG' + (p.def.gp < 10 && f(p.def.prev) ? ' (' + p.def.gp + ' gm; ' + p.def.prev.toFixed(1) + ' last yr)' : '') + (p.def.tag === 'soft' ? ' <span style="color:#34d399">Soft D</span>' : p.def.tag === 'tough' ? ' <span style="color:#f87171">Tough D</span>' : ''));
   const mk = a => a.length ? '<div class="meta" style="margin-top:4px">' + a.join(' · ') + '</div>' : '';
   return mk(bits) + mk(m2);
 }
@@ -513,6 +515,14 @@ async function loadLive(setMsg) {
     const rows = [...(g0 ? gameRows(g0) : []), ...gameRows(g1)];
     const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
   });
+  const defs = {};
+  try {
+    const rd = async s => { const st = await jget('https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings?season=' + s); const m = {}; for (const ch of st.children || []) for (const e of ch.standings.entries) { const g = n => { const x = e.stats.find(y => y.name === n); return x ? x.value : NaN; }; m[e.team.abbreviation] = { pa: g('avgPointsAgainst'), gp: g('wins') + g('losses') }; } return m; };
+    const cur = await rd(season), prev = await rd(season - 1).catch(() => ({})), bl = {};
+    for (const k in cur) { const c = cur[k], q = prev[k]; bl[k] = q && isFinite(q.pa) ? (c.pa * c.gp + q.pa * 20) / (c.gp + 20) : c.pa; }
+    const ranked = Object.keys(bl).filter(k => isFinite(bl[k])).sort((a, b) => bl[b] - bl[a]);
+    ranked.forEach((k, i) => { defs[k] = { cur: cur[k].pa, gp: cur[k].gp, prev: prev[k] && isFinite(prev[k].pa) ? prev[k].pa : null, tag: i < 8 ? 'soft' : i >= ranked.length - 8 ? 'tough' : '' }; });
+  } catch (e) {}
   const inj = {}, tmOut = {}, nk = s => String(s || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv)$/, '').trim();
   try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) { if (q.team && q.search_rank <= 250 && /^(out|ir)/i.test(q.injury_status || '')) (tmOut[q.team] = tmOut[q.team] || []).push({ n: q.full_name, r: q.search_rank }); }
     for (const q of Object.values(sl)) if (q.full_name && q.injury_status) inj[nk(q.full_name)] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
@@ -522,7 +532,7 @@ async function loadLive(setMsg) {
     const ij = inj[nk(p.name)] || '';
     if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n) });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n), def: (g.stat === 'Points' || g.stat === 'Pts+Reb+Ast') && defs[t.opp] ? defs[t.opp] : null });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
