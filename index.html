@@ -126,6 +126,9 @@ nav button.on{color:var(--green)}
     </div>
     <p class="note">Gamble responsibly. If gambling is a problem, call 1-800-GAMBLER.</p>
   </section>
+    <section id="tab-picks" class="hidden">
+    <div id="picksOut"></div>
+  </section>
   <section id="tab-legend" class="hidden">
     <div class="card">
       <b>Reading a play card</b>
@@ -165,6 +168,15 @@ nav button.on{color:var(--green)}
       </p>
     </div>
     <div class="card">
+      <b>Picks tab</b>
+      <p class="note" style="margin-top:6px">
+        <b>Best value:</b> the 3 or 4 plays with the biggest edge. <b>Safest:</b> the plays most likely to hit, even if the edge is smaller.<br>
+        Each slip has one leg per player and per game. Plays are skipped if the player has an injury flag, the game has blowout risk, his minutes are dropping, or the game has already started.<br>
+        <b>Pays / win / EV:</b> the payout multiple, our estimated chance every leg hits, and expected profit per unit. A 4-leg slip hits rarely, so treat these as ideas, not locks.<br>
+        <b>Load into Parlay:</b> copies the slip to the Parlay tab so you can set a stake.
+      </p>
+    </div>
+    <div class="card">
       <b>Parlays</b>
       <p class="note" style="margin-top:6px">
         <b>Payout multiple:</b> what a winning parlay returns per 1 staked, including the stake.<br>
@@ -186,6 +198,7 @@ nav button.on{color:var(--green)}
 <nav>
   <button data-tab="discover" class="on"><span>🔥</span>Discover</button>
   <button data-tab="player"><span>📈</span>Player</button>
+  <button data-tab="picks"><span>🎯</span>Picks</button>
   <button data-tab="parlay"><span>🎟️</span>Parlay <b id="parlayCount"></b></button>
   <button data-tab="legend"><span>📖</span>Legend</button>
   <button data-tab="data"><span>⚙️</span>Data</button>
@@ -532,7 +545,7 @@ async function loadLive(setMsg) {
     const ij = inj[nk(p.name)] || '';
     if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n), def: (g.stat === 'Points' || g.stat === 'Pts+Reb+Ast') && defs[t.opp] ? defs[t.opp] : null });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n), tip: t.date, def: (g.stat === 'Points' || g.stat === 'Pts+Reb+Ast') && defs[t.opp] ? defs[t.opp] : null });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
@@ -549,18 +562,51 @@ async function doLive() {
   btn.disabled = false;
 }
 
+/* ---------- suggested slips (Picks tab) ---------- */
+const SLIPS = {};
+function pickSlips(n, mode) {
+  const now = Date.now();
+  const c = buildBoard(DATA, 'over').concat(buildBoard(DATA, 'under')).filter(r =>
+    r.edge > .03 && r.est >= .56 && r.games >= 15 && r.odds >= -250 && r.odds <= 300 && !r.inj && !(r.adj < -.03) && !(Math.abs(r.spread) >= 10) && !(r.tip && Date.parse(r.tip) <= now));
+  c.sort((a, b) => mode === 'safe' ? (b.est - a.est || b.edge - a.edge) : b.edge - a.edge);
+  const out = [], pl = new Set(), gm = new Set();
+  for (const r of c) {
+    const g = [r.team, r.opponent].sort().join('@');
+    if (pl.has(r.player) || gm.has(g)) continue;
+    out.push(r); pl.add(r.player); gm.add(g);
+    if (out.length === n) break;
+  }
+  return out.length === n ? out : null;
+}
+function renderPicks() {
+  const el = $('#picksOut'); if (!el) return;
+  const tm = iso => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const tips = DATA.props.map(p => p.tip).filter(t => t && Date.parse(t) > Date.now()).sort();
+  let html = '<p class="note" style="margin-top:0">' + (tips.length ? 'Next tip-off ' + tm(tips[0]) + '. ' : '') + 'Built from the board: one leg per player and per game, no injury flags, no blowout-risk games, no big minutes drops. Past results only, so no guarantees.</p>';
+  [[3, 'edge', 'Best value'], [3, 'safe', 'Safest'], [4, 'edge', 'Best value'], [4, 'safe', 'Safest']].forEach(([n, mode, label]) => {
+    const legs = pickSlips(n, mode), id = n + mode; SLIPS[id] = legs;
+    if (!legs) { html += '<div class="card"><b>' + n + '-leg · ' + label + '</b><p class="note">Not enough qualifying plays right now.</p></div>'; return; }
+    const p = parlay(legs);
+    html += '<div class="card"><div class="pick">' + n + '-leg · ' + label + '</div><div class="meta">Pays ' + p.dec.toFixed(2) + 'x · win ' + (p.prob * 100).toFixed(1) + '% · EV ' + (p.ev >= 0 ? '+' : '') + p.ev.toFixed(2) + ' per unit</div>' +
+      legs.map(l => '<div style="margin-top:10px"><div style="font-weight:700">' + esc(l.player) + ' ' + l.side.toUpperCase() + ' ' + l.line + ' ' + esc(l.stat) + '</div><div class="meta">' + esc(l.team) + ' vs ' + esc(l.opponent) + ' · ' + fmtOdds(l.odds) + ' · est ' + pct(l.est) + ' · edge ' + sgn(l.edge) + (l.tip ? ' · ' + tm(l.tip) : '') + '</div></div>').join('') +
+      '<p style="margin:12px 0 0"><button class="btn" data-slip="' + id + '">Load into Parlay</button></p></div>';
+  });
+  el.innerHTML = html;
+}
+
 /* ---------- wiring ---------- */
 function showTab(t) {
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + t));
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   if (t === 'parlay') renderParlay();
+  if (t === 'picks') renderPicks();
   window.scrollTo(0, 0);
 }
 function refreshAll() {
   const b = $('#banner');
   b.classList.toggle('hidden', !DATA.sample && !DATA.live);
   b.innerHTML = DATA.live ? 'Showing <b>live NBA data</b> (ESPN / DraftKings). Over/under odds order unverified.' : 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
-  renderChips(); renderBoard(); fillPlayers(); renderParlay();
+  renderChips(); renderBoard(); fillPlayers(); renderParlay(); renderPicks();
 }
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
@@ -573,6 +619,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'clearParlay') { S.parlay = []; store.set('propmate.parlay', []); renderParlay(); renderBoard(); }
   else if (t.id === 'loadBtn') loadFiles();
   else if (t.id === 'liveBtn') doLive();
+  else if (t.dataset.slip) { const legs = SLIPS[t.dataset.slip]; if (legs) { S.parlay = legs.map(l => l.key + '|' + l.side); store.set('propmate.parlay', S.parlay); renderBoard(); showTab('parlay'); } }
   else if (t.id === 'resetBtn') { store.del('propmate.data'); store.del('propmate.parlay'); DATA = sampleData(); S.parlay = []; S.sports = null; $('#dataMsg').textContent = 'Back on sample data.'; refreshAll(); }
 });
 document.addEventListener('input', e => {
