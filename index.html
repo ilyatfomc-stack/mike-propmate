@@ -156,7 +156,11 @@ nav button.on{color:var(--green)}
         <b>Est. +7.1% for minutes:</b> the estimate was nudged for the minutes change. More minutes helps an over, fewer minutes helps an under. Capped at 8 points.<br>
         <b>Line 22.5 → 24.5 ▲:</b> the line has moved from where it opened. Up means the book expects more. Down means less.<br>
         <b>Back-to-back:</b> his team played yesterday. If he has 3 or more past back-to-backs it also shows his average on them vs rested.<br>
-        <b>⚠ GTD / DTD:</b> injury flag. GTD is a game-time decision and DTD is day-to-day. The body part is in brackets. Players listed Out or on IR are left off the board.
+        <b>⚠ GTD / DTD:</b> injury flag. GTD is a game-time decision and DTD is day-to-day. The body part is in brackets. Players listed Out or on IR are left off the board.<br>
+        <b>Home 22.1 · Away 18.4 avg:</b> his average for this stat at home vs on the road. Tonight's venue is bold. Needs 3 or more games each way.<br>
+        <b>vs ORL 21.0 avg in 3 games:</b> his average against tonight's opponent, shown with 2 or more games, next to his overall average.<br>
+        <b>Spread -3.5 · Total 220.5:</b> the game line from his team's side. Minus means his team is favored. A spread of 10 or more shows Blowout risk, since starters may sit late.<br>
+        <b>Teammates out:</b> notable teammates ruled out tonight. Their shots and minutes often go to others.
       </p>
     </div>
     <div class="card">
@@ -446,18 +450,21 @@ function gameRows(g) {
       const tp = String(s[ix('threePointFieldGoalsMade-threePointFieldGoalsAttempted')] || '').split('-')[0];
       const pts = num('points'), reb = num('totalRebounds'), ast = num('assists');
       if ([pts, reb, ast].some(isNaN)) continue;
-      rows.push({ d: meta.gameDate, 'Points': pts, 'Rebounds': reb, 'Assists': ast, '3-Pointers Made': parseFloat(tp), 'Steals': num('steals'), 'Blocks': num('blocks'), 'Pts+Reb+Ast': pts + reb + ast, m: num('minutes') });
+      rows.push({ d: meta.gameDate, 'Points': pts, 'Rebounds': reb, 'Assists': ast, '3-Pointers Made': parseFloat(tp), 'Steals': num('steals'), 'Blocks': num('blocks'), 'Pts+Reb+Ast': pts + reb + ast, m: num('minutes'), ha: meta.atVs, opp: meta.opponent && meta.opponent.abbreviation });
     }
   }
   return rows;
 }
-function liveCtx(rows, stat, tonight) {
+const SLT = { WSH: 'WAS', NY: 'NYK', GS: 'GSW', NO: 'NOP', SA: 'SAS', UTAH: 'UTA' };
+function liveCtx(rows, stat, tonight, home, opp) {
   const n = rows.length, avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN, r1 = x => isFinite(x) ? Math.round(x * 10) / 10 : null;
   const mins = rows.map(r => r.m).filter(x => isFinite(x));
   const H36 = 36 * 3600e3, t = tonight ? Date.parse(tonight) : NaN;
   const bv = [], nv = [];
   rows.forEach((r, i) => { if (i && Date.parse(r.d) - Date.parse(rows[i - 1].d) < H36) bv.push(r[stat]); else nv.push(r[stat]); });
-  return { minL5: r1(avg(mins.slice(-5))), minAvg: r1(avg(mins.slice(-20))), b2b: isFinite(t) && t - Date.parse(rows[n - 1].d) < H36, b2bN: bv.length, b2bAvg: r1(avg(bv)), restAvg: r1(avg(nv)) };
+  const hv = rows.filter(r => r.ha === 'vs').map(r => r[stat]), av = rows.filter(r => r.ha === '@').map(r => r[stat]), vv = rows.filter(r => r.opp === opp).map(r => r[stat]);
+  const ven = { hN: hv.length, hAvg: r1(avg(hv)), aN: av.length, aAvg: r1(avg(av)), vsN: vv.length, vsAvg: r1(avg(vv)), allAvg: r1(avg(rows.map(r => r[stat]))), home };
+  return { minL5: r1(avg(mins.slice(-5))), minAvg: r1(avg(mins.slice(-20))), b2b: isFinite(t) && t - Date.parse(rows[n - 1].d) < H36, b2bN: bv.length, b2bAvg: r1(avg(bv)), restAvg: r1(avg(nv)), ...ven };
 }
 function ctxHtml(p) {
   const f = x => typeof x === 'number' && isFinite(x), bits = [];
@@ -465,14 +472,20 @@ function ctxHtml(p) {
   if (f(p.adj) && Math.abs(p.adj) >= .005) bits.push('Est. ' + (p.adj > 0 ? '+' : '−') + (Math.abs(p.adj) * 100).toFixed(1) + '% for minutes');
   if (f(p.open) && p.open !== p.line) bits.push('Line ' + p.open + ' → ' + p.line + (p.line > p.open ? ' ▲' : ' ▼'));
   if (p.b2b) bits.push('<span style="color:#fbbf24">Back-to-back' + (p.b2bN >= 3 && f(p.b2bAvg) && f(p.restAvg) ? ' (avg ' + p.b2bAvg + ' on B2B vs ' + p.restAvg + ' rested)' : '') + '</span>');
-  return bits.length ? '<div class="meta" style="margin-top:4px">' + bits.join(' · ') + '</div>' : '';
+  const m2 = [];
+  if (p.home !== undefined && f(p.hAvg) && f(p.aAvg) && p.hN >= 3 && p.aN >= 3) m2.push((p.home ? '<b>Home ' + p.hAvg + '</b> · Away ' + p.aAvg : 'Home ' + p.hAvg + ' · <b>Away ' + p.aAvg + '</b>') + ' avg');
+  if (p.vsN >= 2 && f(p.vsAvg)) m2.push('vs ' + p.opponent + ' ' + p.vsAvg + ' avg in ' + p.vsN + ' games (overall ' + p.allAvg + ')');
+  if (f(p.spread) || f(p.total)) { const big = f(p.spread) && Math.abs(p.spread) >= 10; m2.push('Spread ' + (f(p.spread) ? (p.spread > 0 ? '+' : '') + p.spread : '–') + (f(p.total) ? ' · Total ' + p.total : '') + (big ? ' <span style="color:#fbbf24">Blowout risk</span>' : '')); }
+  if (p.tm && p.tm.length) m2.push('<span style="color:#fbbf24">Teammates out: ' + p.tm.map(esc).join(', ') + '</span>');
+  const mk = a => a.length ? '<div class="meta" style="margin-top:4px">' + a.join(' · ') + '</div>' : '';
+  return mk(bits) + mk(m2);
 }
 async function loadLive(setMsg) {
   const sb = await jget('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
   const games = (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
   if (!games.length) throw new Error('No upcoming NBA games found right now.');
   const teams = {};
-  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation, date: e.date }; } }
+  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation, date: e.date, ...(() => { const od = (e.competitions[0].odds || [])[0] || {}; return { home: c.homeAway === 'home', spread: isFinite(od.spread) ? (c.homeAway === 'home' ? od.spread : -od.spread) : null, total: isFinite(od.overUnder) ? od.overUnder : null }; })() }; } }
   setMsg('Found ' + games.length + ' games. Loading prop lines...');
   const groups = {};
   for (const e of games) {
@@ -500,15 +513,16 @@ async function loadLive(setMsg) {
     const rows = [...(g0 ? gameRows(g0) : []), ...gameRows(g1)];
     const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
   });
-  const inj = {}, nk = s => String(s || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv)$/, '').trim();
-  try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) if (q.full_name && q.injury_status) inj[nk(q.full_name)] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
+  const inj = {}, tmOut = {}, nk = s => String(s || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv)$/, '').trim();
+  try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) { if (q.team && q.search_rank <= 250 && /^(out|ir)/i.test(q.injury_status || '')) (tmOut[q.team] = tmOut[q.team] || []).push({ n: q.full_name, r: q.search_rank }); }
+    for (const q of Object.values(sl)) if (q.full_name && q.injury_status) inj[nk(q.full_name)] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
   const props = [], logs = {};
   for (const g of pairs) {
     const p = info[g.id]; if (!p || !p.name || p.rows.length < 8) continue;
     const ij = inj[nk(p.name)] || '';
     if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date) });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n) });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
