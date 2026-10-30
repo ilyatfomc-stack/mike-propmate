@@ -423,14 +423,15 @@ async function loadLive(setMsg) {
     const rows = [...(g0 ? gameRows(g0) : []), ...gameRows(g1)];
     const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
   });
-  const inj = {};
-  try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) if (q.espn_id && q.injury_status) inj[q.espn_id] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
+  const inj = {}, nk = s => String(s || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv)$/, '').trim();
+  try { setMsg('Checking injuries...'); const sl = await jget('https://api.sleeper.app/v1/players/nba'); for (const q of Object.values(sl)) if (q.full_name && q.injury_status) inj[nk(q.full_name)] = q.injury_status + (q.injury_body_part ? ' (' + q.injury_body_part + ')' : ''); } catch (e) {}
   const props = [], logs = {};
   for (const g of pairs) {
     const p = info[g.id]; if (!p || !p.name || p.rows.length < 8) continue;
-    if (/^(out|ir)/i.test(inj[g.id] || '')) continue;
+    const ij = inj[nk(p.name)] || '';
+    if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: inj[g.id] || '' });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
