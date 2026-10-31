@@ -655,7 +655,7 @@ async function doLiveNFL() {
     store.set('propmate.data', DATA); S.sports = null;
     msg.textContent = 'Loaded ' + r.props.length + ' NFL props. Open the Discover tab and pick NFL.';
     refreshAll();
-  } catch (e) { msg.textContent = 'Could not load NFL data: ' + e.message; }
+  } catch (e) { msg.textContent = 'Could not load NFL data: ' + e.message; DATA.nflAt = new Date().toISOString(); store.set('propmate.data', DATA); }
   btn.disabled = false;
 }
 async function doLive() {
@@ -743,9 +743,9 @@ refreshAll();
 (function autoLive() {
   if (!DATA.sample && !DATA.live) return;
   const age = DATA.loadedAt ? Date.now() - Date.parse(DATA.loadedAt) : Infinity;
-  if (age < 20 * 60 * 1000) return;
+  if (age < 20 * 60 * 1000 && DATA.nflAt && Date.now() - Date.parse(DATA.nflAt) < 20 * 60 * 1000) return;
   const b = $('#banner'); b.classList.remove('hidden'); b.innerHTML = 'Loading <b>live data</b>...';
-  doLive().then(async () => { if (DATA.props.some(p => p.sport === 'NFL') && (!DATA.nflAt || Date.now() - Date.parse(DATA.nflAt) > 20 * 60 * 1000)) await doLiveNFL(); if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
+  doLive().then(async () => { if (!DATA.nflAt || Date.now() - Date.parse(DATA.nflAt) > 20 * 60 * 1000) await doLiveNFL(); if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
 })();
 </script>
 </body>
