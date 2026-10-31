@@ -124,7 +124,7 @@ nav button.on{color:var(--green)}
       <b>How the numbers work</b>
       <p class="note" style="margin-top:6px">
         <b>Hit rate:</b> share of games clearing the line (pushes excluded).<br>
-        <b>Est. prob:</b> weighted blend of last 5/10/20 and season hit rates, shrunk toward 50% for small samples.<br>
+        <b>Est. prob:</b> weighted blend of last 5/10/20 and season hit rates, shrunk toward 50% for small samples, then blended 50/50 with the sportsbook's own no-vig probability so one hot stretch can't make a big edge on its own.<br>
         <b>Implied:</b> probability from the odds, including the book's cut.<br>
         <b>Edge:</b> est. prob minus implied. It only looks at past results: no matchups or injuries. With live data it also nudges the estimate when recent minutes differ from normal (up to 8 points).<br>
         <b>Parlays</b> assume independent legs.
@@ -151,7 +151,7 @@ nav button.on{color:var(--green)}
     <div class="card">
       <b>The numbers</b>
       <p class="note" style="margin-top:6px">
-        <b>Est. prob:</b> a blend of his hit rates (last 5 counts most, then 10, 20 and season), pulled toward 50% when there are few games.<br>
+        <b>Est. prob:</b> a blend of his hit rates (last 5 counts most, then 10, 20 and season), pulled toward 50% when there are few games, then blended 50/50 with the sportsbook's own no-vig probability (the odds with the sportsbook's cut removed). That keeps edges realistic and stops the board from leaning all one way.<br>
         <b>Implied:</b> the chance built into the odds. It includes the sportsbook's cut, so over and under don't add to 100%.<br>
         <b>Edge:</b> est. prob minus implied. Positive means we think the bet is priced too low.<br>
         <b>EV / unit:</b> expected profit per 1 unit staked, if our estimate is right.<br>
@@ -292,14 +292,18 @@ function analyze(vals, line, odds, side) {
   o.ev = o.est * payout(odds) - (1 - o.est);
   return o;
 }
-/* live data only: nudge the estimate when recent minutes differ from normal (max +/-8 points) */
+/* final estimate: minutes nudge (live data, max +/-8 points), then a 50/50 blend with the sportsbook's no-vig probability */
 function adjMin(a, p, side, odds) {
-  if (!p || !(p.minL5 > 0) || !(p.minAvg > 0)) return { ...a, adj: 0 };
-  const ratio = p.minL5 / p.minAvg - 1;
-  if (Math.abs(ratio) < .03) return { ...a, adj: 0 };
-  const d = Math.max(-.08, Math.min(.08, .5 * ratio * (side === 'under' ? -1 : 1)));
-  const est = Math.max(.02, Math.min(.98, a.est + d));
-  return { ...a, est, edge: est - a.implied, ev: est * payout(odds) - (1 - est), adj: est - a.est };
+  let est = a.est, adj = 0;
+  if (p && p.minL5 > 0 && p.minAvg > 0) {
+    const ratio = p.minL5 / p.minAvg - 1;
+    if (Math.abs(ratio) >= .03) { const d = Math.max(-.08, Math.min(.08, .5 * ratio * (side === 'under' ? -1 : 1))); est = Math.max(.02, Math.min(.98, est + d)); adj = est - a.est; }
+  }
+  let fair = a.implied;
+  const stored = p ? (side === 'under' ? p.oddsUnder : p.odds) : null;
+  if (p && p.oddsUnder && p.odds && stored === odds) { const io = impliedProb(p.odds), iu = impliedProb(p.oddsUnder); fair = (side === 'under' ? iu : io) / (io + iu); }
+  est = Math.max(.02, Math.min(.98, .5 * est + .5 * fair));
+  return { ...a, est, edge: est - a.implied, ev: est * payout(odds) - (1 - est), adj };
 }
 function buildBoard(data, side) {
   const rows = [];
