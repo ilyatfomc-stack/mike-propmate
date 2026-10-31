@@ -626,7 +626,7 @@ async function loadNFL(setMsg) {
     const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
   });
   const inj = {};
-  try { setMsg('Checking injuries...'); const ij = await jget('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries'); for (const t of ij.injuries || []) for (const q of t.injuries || []) if (q.athlete && q.status) inj[nk(q.athlete.displayName)] = q.status; } catch (e) {}
+  try { setMsg('Checking injuries...'); const ij = await jget('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries'); for (const t of ij.injuries || []) for (const q of t.injuries || []) if (q.athlete && q.status && !/^active$/i.test(q.status)) inj[nk(q.athlete.displayName)] = q.status; } catch (e) {}
   const props = [], logs = {};
   for (const x of list) {
     const p = info[x.id]; if (!p || !p.name) continue;
