@@ -503,8 +503,11 @@ function ctxHtml(p) {
   return mk(bits) + mk(m2);
 }
 async function loadLive(setMsg) {
-  const sb = await jget('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
-  const games = (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
+  const ymd = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const upcoming = sb => (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
+  const nbaSb = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=';
+  let games = upcoming(await jget(nbaSb + ymd(new Date())));
+  if (!games.length) { const nx = new Date(); nx.setDate(nx.getDate() + 1); games = upcoming(await jget(nbaSb + ymd(nx))); }
   if (!games.length) throw new Error('No upcoming NBA games found right now.');
   const teams = {};
   for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation, date: e.date, ...(() => { const od = (e.competitions[0].odds || [])[0] || {}; return { home: c.homeAway === 'home', spread: isFinite(od.spread) ? (c.homeAway === 'home' ? od.spread : -od.spread) : null, total: isFinite(od.overUnder) ? od.overUnder : null }; })() }; } }
