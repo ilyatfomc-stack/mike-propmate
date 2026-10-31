@@ -151,7 +151,7 @@ nav button.on{color:var(--green)}
     <div class="card">
       <b>The numbers</b>
       <p class="note" style="margin-top:6px">
-        <b>Est. prob:</b> a blend of his hit rates (last 5 counts most, then 10, 20 and season), pulled toward 50% when there are few games, then blended 50/50 with the sportsbook's own no-vig probability (the odds with the sportsbook's cut removed). That keeps edges realistic and stops the board from leaning all one way.<br>
+        <b>Est. prob:</b> a blend of his hit rates (last 5 counts most, then 10, 20 and season), pulled toward 50% when there are few games, then blended 50/50 with the sportsbook's own no-vig probability (the odds with the sportsbook's cut removed). Before blending, the app also removes the lean shared by the whole board (lines sit a bit above most players' averages, so overs look worse and unders better than they are), so over and under plays are judged on how a player stands out from the pack.<br>
         <b>Implied:</b> the chance built into the odds. It includes the sportsbook's cut, so over and under don't add to 100%.<br>
         <b>Edge:</b> est. prob minus implied. Positive means we think the bet is priced too low.<br>
         <b>EV / unit:</b> expected profit per 1 unit staked, if our estimate is right.<br>
@@ -292,12 +292,29 @@ function analyze(vals, line, odds, side) {
   o.ev = o.est * payout(odds) - (1 - o.est);
   return o;
 }
-/* final estimate: minutes nudge (live data, max +/-8 points), then a 50/50 blend with the sportsbook's no-vig probability */
+/* board-wide lean: lines sit a bit above most players' averages, so overs average under 50% and unders over 50%. Measure it per sport and remove it. */
+let SKEW = { key: null, v: {} };
+function skewFor(sport) {
+  if (SKEW.key !== DATA) {
+    const acc = {};
+    for (const p of DATA.props) {
+      const vals = DATA.logs[p.player + '|' + p.stat]; if (!vals || vals.length < 8) continue;
+      const a = analyze(vals, p.line, p.odds, 'over'); if (!isFinite(a.est)) continue;
+      (acc[p.sport] = acc[p.sport] || []).push(a.est);
+    }
+    SKEW = { key: DATA, v: {} };
+    for (const k in acc) SKEW.v[k] = acc[k].length >= 30 ? acc[k].reduce((x, y) => x + y, 0) / acc[k].length - .5 : 0;
+  }
+  return SKEW.v[sport] || 0;
+}
+/* final estimate: remove the board-wide lean, minutes nudge (live data, max +/-8 points), then a 50/50 blend with the sportsbook's no-vig probability */
 function adjMin(a, p, side, odds) {
-  let est = a.est, adj = 0;
+  const sk = p && p.sport ? skewFor(p.sport) : 0;
+  let est = Math.max(.02, Math.min(.98, a.est - (side === 'over' ? sk : -sk))), adj = 0;
+  const e0 = est;
   if (p && p.minL5 > 0 && p.minAvg > 0) {
     const ratio = p.minL5 / p.minAvg - 1;
-    if (Math.abs(ratio) >= .03) { const d = Math.max(-.08, Math.min(.08, .5 * ratio * (side === 'under' ? -1 : 1))); est = Math.max(.02, Math.min(.98, est + d)); adj = est - a.est; }
+    if (Math.abs(ratio) >= .03) { const d = Math.max(-.08, Math.min(.08, .5 * ratio * (side === 'under' ? -1 : 1))); est = Math.max(.02, Math.min(.98, est + d)); adj = est - e0; }
   }
   let fair = a.implied;
   const stored = p ? (side === 'under' ? p.oddsUnder : p.odds) : null;
