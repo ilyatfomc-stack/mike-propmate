@@ -105,6 +105,12 @@ nav button.on{color:var(--green)}
       <p class="note" id="liveMsg"></p>
     </div>
     <div class="card">
+      <b>Live NFL data (free)</b>
+      <p class="note" style="margin-top:6px">Pulls this week's DraftKings lines and game logs from ESPN. ESPN gives no NFL prices, so every NFL play is shown at an assumed -110 (marked with *). Edge and payouts for NFL are rough.</p>
+      <p style="margin:12px 0 0"><button class="btn" id="nflBtn">Load NFL data</button></p>
+      <p class="note" id="nflMsg"></p>
+    </div>
+    <div class="card">
       <b>Use your own data</b>
       <p class="note" style="margin-top:6px">Load two CSV files. Data stays on this device.</p>
       <label>props.csv &nbsp;(player,team,opponent,sport,stat,line,odds)</label>
@@ -188,6 +194,7 @@ nav button.on{color:var(--green)}
       <p class="note" style="margin-top:6px">
         Lines and odds: DraftKings via ESPN. Game logs and minutes: ESPN. Injuries: Sleeper. All free and unofficial, so they can be late or wrong, and a late scratch may not show up yet.<br>
         The over and under odds are matched by order from ESPN and haven't been verified against DraftKings.<br>
+        <b>NFL:</b> ESPN lists DraftKings lines for NFL but no prices, so every NFL play is shown at an assumed -110 (marked *). Edge, EV and parlay payouts for NFL are rough, and NFL plays are left out of the Picks tab. NFL injuries come from ESPN, and minutes, back-to-back and opponent-defense lines do not apply.<br>
         The model only looks at past results and minutes. It does not know matchups, pace, or teammates' injuries.
       </p>
     </div>
@@ -329,7 +336,7 @@ function renderBoard() {
     const hit = (lbl, v) => `<div class="hit">${lbl}<b>${pct(v)}</b><div class="bar"><i style="width:${isNaN(v) ? 0 : v * 100}%"></i></div></div>`;
     return `<div class="card">
       <div class="top"><div><div class="pick">${esc(r.player)} ${r.side.toUpperCase()} ${r.line} ${esc(r.stat)}</div>
-        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}${r.inj ? ' · <span style="color:#fbbf24">⚠ ' + esc(r.inj) + '</span>' : ''}</div>${ctxHtml(r)}</div>
+        <div class="meta">${esc(r.team)} vs ${esc(r.opponent)} · ${esc(r.sport)} · ${fmtOdds(r.odds)}${r.noOdds ? '*' : ''}${r.inj ? ' · <span style="color:#fbbf24">⚠ ' + esc(r.inj) + '</span>' : ''}</div>${ctxHtml(r)}</div>
         <div class="badge ${edgeClass(r.edge)}">${sgn(r.edge)}</div></div>
       <div class="hits">${hit('L5', r.hit5)}${hit('L10', r.hit10)}${hit('L20', r.hit20)}${hit('Season', r.hitS)}</div>
       <div class="foot"><span>Est ${pct(r.est)} vs implied ${pct(r.implied)} · streak ${r.streak}</span>
@@ -551,10 +558,108 @@ async function loadLive(setMsg) {
   if (!props.length) throw new Error('No props could be built.');
   return { props, logs, sample: false, live: true, loadedAt: new Date().toISOString() };
 }
+/* ---------- NFL live data (lines only: ESPN has no NFL prop prices) ---------- */
+const NFL_TYPES = { 'Total Passing Yards': 'Passing Yards', 'Total Pass Completions': 'Pass Completions', 'Total Passing Touchdowns': 'Pass TDs', 'Total Carries': 'Rush Attempts', 'Total Rushing Yards': 'Rushing Yards', 'Total Receiving Yards': 'Receiving Yards', 'Total Receptions': 'Receptions', 'Total Passing Interceptions': 'Interceptions', 'Total Passing Attempts': 'Pass Attempts', 'Total Passing Plus Rushing Yards': 'Pass+Rush Yards', 'Total Rushing Plus Receiving Yards': 'Rush+Rec Yards' };
+function nflVal(rec, stat) {
+  switch (stat) {
+    case 'Passing Yards': return rec.passingYards;
+    case 'Pass Completions': return rec.completions;
+    case 'Pass Attempts': return rec.passingAttempts;
+    case 'Pass TDs': return rec.passingTouchdowns;
+    case 'Interceptions': return rec.interceptions;
+    case 'Rush Attempts': return rec.rushingAttempts;
+    case 'Rushing Yards': return rec.rushingYards;
+    case 'Receptions': return rec.receptions;
+    case 'Receiving Yards': return rec.receivingYards;
+    case 'Pass+Rush Yards': return rec.passingYards + rec.rushingYards;
+    case 'Rush+Rec Yards': return rec.rushingYards + rec.receivingYards;
+  }
+  return NaN;
+}
+function nflRows(g) {
+  const nm = g.names || [], rows = [];
+  for (const st of g.seasonTypes || []) {
+    if (/pre/i.test(st.displayName || '')) continue;
+    for (const c of st.categories || []) for (const ev of c.events || []) {
+      const meta = (g.events || {})[ev.eventId]; if (!meta || !meta.gameDate) continue;
+      const rec = {}; nm.forEach((n, i) => { rec[n] = parseFloat(ev.stats[i]); });
+      const row = { d: meta.gameDate, ha: meta.atVs, opp: meta.opponent && meta.opponent.abbreviation };
+      Object.values(NFL_TYPES).forEach(s => { row[s] = nflVal(rec, s); });
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+async function loadNFL(setMsg) {
+  const sb = await jget('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+  const games = (sb.events || []).filter(e => e.status && e.status.type && e.status.type.state === 'pre');
+  if (!games.length) throw new Error('No upcoming NFL games found right now.');
+  const season = (sb.season && sb.season.year) || new Date().getFullYear();
+  const nk = s => String(s || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv)$/, '').trim();
+  const teams = {};
+  for (const e of games) { const cs = e.competitions[0].competitors; for (const c of cs) { const o = cs.find(x => x !== c); teams[c.team.id] = { abbr: c.team.abbreviation, opp: o.team.abbreviation, date: e.date, ...(() => { const od = (e.competitions[0].odds || [])[0] || {}; return { home: c.homeAway === 'home', spread: isFinite(od.spread) ? (c.homeAway === 'home' ? od.spread : -od.spread) : null, total: isFinite(od.overUnder) ? od.overUnder : null }; })() }; } }
+  setMsg('Found ' + games.length + ' NFL games. Loading prop lines...');
+  const evUrl = e => 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/' + e.id + '/competitions/' + e.id + '/odds/100/propBets?lang=en&region=us&limit=200';
+  const firsts = await pool(games, 4, e => jget(evUrl(e) + '&page=1'));
+  const jobs = [];
+  games.forEach((e, i) => { const f = firsts[i]; if (!f) return; jobs.push({ f }); for (let p = 2; p <= (f.pageCount || 1); p++) jobs.push({ u: evUrl(e) + '&page=' + p }); });
+  const pages = await pool(jobs, 6, async j => j.f || await jget(j.u));
+  const found = {};
+  for (const pg of pages) for (const it of (pg && pg.items) || []) {
+    const stat = NFL_TYPES[((it.type && it.type.name) || '').replace(' (incl. overtime)', '')];
+    if (!stat || !it.athlete || !it.current || !it.current.target) continue;
+    const id = it.athlete.$ref.split('/athletes/')[1].split('?')[0], line = parseFloat(it.current.target.value);
+    if (isNaN(line)) continue;
+    const k = id + '|' + stat;
+    if (!found[k]) found[k] = { id, stat, line, open: it.open && it.open.target ? parseFloat(it.open.target.value) : null };
+  }
+  const list = Object.values(found), ids = [...new Set(list.map(x => x.id))];
+  setMsg('Loading ' + ids.length + ' players...');
+  const info = {};
+  await pool(ids, 6, async id => {
+    const [a, g1, g0] = await Promise.all([
+      jget('https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/athletes/' + id + '?lang=en&region=us'),
+      jget('https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/' + id + '/gamelog'),
+      jget('https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/' + id + '/gamelog?season=' + (season - 1)).catch(() => null)]);
+    const tid = a.team && a.team.$ref ? (a.team.$ref.match(/teams\/(\d+)/) || [])[1] : null;
+    const rows = [...(g0 ? nflRows(g0) : []), ...nflRows(g1)];
+    const seen = new Set(); info[id] = { name: a.displayName, tid, rows: rows.filter(r => !seen.has(r.d) && seen.add(r.d)).sort((x, y) => x.d < y.d ? -1 : 1) };
+  });
+  const inj = {};
+  try { setMsg('Checking injuries...'); const ij = await jget('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries'); for (const t of ij.injuries || []) for (const q of t.injuries || []) if (q.athlete && q.status) inj[nk(q.athlete.displayName)] = q.status; } catch (e) {}
+  const props = [], logs = {};
+  for (const x of list) {
+    const p = info[x.id]; if (!p || !p.name) continue;
+    const vals = p.rows.filter(r => isFinite(r[x.stat]));
+    if (vals.length < 8) continue;
+    const ij = inj[nk(p.name)] || '';
+    if (/^(out|inj|ir)/i.test(ij)) continue;
+    const t = teams[p.tid] || { abbr: '', opp: '' };
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NFL', stat: x.stat, line: x.line, odds: -110, oddsUnder: -110, noOdds: true, live: true, inj: ij, open: x.open, ...liveCtx(vals, x.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: [], tip: t.date, def: null });
+    logs[p.name + '|' + x.stat] = vals.map(r => r[x.stat]);
+  }
+  if (!props.length) throw new Error('No NFL props could be built.');
+  return { props, logs };
+}
+async function doLiveNFL() {
+  const msg = $('#nflMsg'), btn = $('#nflBtn'); btn.disabled = true; msg.textContent = 'Starting...';
+  try {
+    const r = await loadNFL(m => { msg.textContent = m; });
+    const base = DATA.live ? DATA : { props: [], logs: {} };
+    const oldKeys = new Set(base.props.filter(p => p.sport === 'NFL').map(p => p.player + '|' + p.stat));
+    const logs = {}; for (const k in base.logs) if (!oldKeys.has(k)) logs[k] = base.logs[k];
+    DATA = { props: base.props.filter(p => p.sport !== 'NFL').concat(r.props), logs: Object.assign(logs, r.logs), sample: false, live: true, loadedAt: base.loadedAt || new Date().toISOString(), nflAt: new Date().toISOString() };
+    store.set('propmate.data', DATA); S.sports = null;
+    msg.textContent = 'Loaded ' + r.props.length + ' NFL props. Open the Discover tab and pick NFL.';
+    refreshAll();
+  } catch (e) { msg.textContent = 'Could not load NFL data: ' + e.message; }
+  btn.disabled = false;
+}
 async function doLive() {
   const msg = $('#liveMsg'), btn = $('#liveBtn'); btn.disabled = true; msg.textContent = 'Starting...';
   try {
-    DATA = await loadLive(m => { msg.textContent = m; });
+    const old = DATA; DATA = await loadLive(m => { msg.textContent = m; });
+    if (old.live) { const nf = old.props.filter(p => p.sport === 'NFL'); if (nf.length) { DATA.props = DATA.props.concat(nf); nf.forEach(p => { const k = p.player + '|' + p.stat; if (old.logs[k]) DATA.logs[k] = old.logs[k]; }); DATA.nflAt = old.nflAt; } }
     store.set('propmate.data', DATA); store.set('propmate.parlay', []); S.parlay = []; S.sports = null;
     msg.textContent = 'Loaded ' + DATA.props.length + ' live props. Open the Discover tab.';
     refreshAll();
@@ -567,7 +672,7 @@ const SLIPS = {};
 function pickSlips(n, mode) {
   const now = Date.now();
   const c = buildBoard(DATA, 'over').concat(buildBoard(DATA, 'under')).filter(r =>
-    r.edge > .03 && r.est >= .56 && r.games >= 15 && r.odds >= -250 && r.odds <= 300 && !r.inj && !(r.adj < -.03) && !(Math.abs(r.spread) >= 10) && !(r.tip && Date.parse(r.tip) <= now));
+    !r.noOdds && r.edge > .03 && r.est >= .56 && r.games >= 15 && r.odds >= -250 && r.odds <= 300 && !r.inj && !(r.adj < -.03) && !(Math.abs(r.spread) >= 10) && !(r.tip && Date.parse(r.tip) <= now));
   c.sort((a, b) => mode === 'safe' ? (b.est - a.est || b.edge - a.edge) : b.edge - a.edge);
   const out = [], pl = new Set(), gm = new Set();
   for (const r of c) {
@@ -605,7 +710,7 @@ function showTab(t) {
 function refreshAll() {
   const b = $('#banner');
   b.classList.toggle('hidden', !DATA.sample && !DATA.live);
-  b.innerHTML = DATA.live ? 'Showing <b>live NBA data</b> (ESPN / DraftKings). Over/under odds order unverified.' : 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
+  b.innerHTML = DATA.live ? 'Showing <b>live data</b> (ESPN / DraftKings). NBA over/under odds order unverified. NFL odds are assumed -110 (marked *).' : 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
   renderChips(); renderBoard(); fillPlayers(); renderParlay(); renderPicks();
 }
 document.addEventListener('click', e => {
@@ -619,6 +724,7 @@ document.addEventListener('click', e => {
   else if (t.id === 'clearParlay') { S.parlay = []; store.set('propmate.parlay', []); renderParlay(); renderBoard(); }
   else if (t.id === 'loadBtn') loadFiles();
   else if (t.id === 'liveBtn') doLive();
+  else if (t.id === 'nflBtn') doLiveNFL();
   else if (t.dataset.slip) { const legs = SLIPS[t.dataset.slip]; if (legs) { S.parlay = legs.map(l => l.key + '|' + l.side); store.set('propmate.parlay', S.parlay); renderBoard(); showTab('parlay'); } }
   else if (t.id === 'resetBtn') { store.del('propmate.data'); store.del('propmate.parlay'); DATA = sampleData(); S.parlay = []; S.sports = null; $('#dataMsg').textContent = 'Back on sample data.'; refreshAll(); }
 });
@@ -635,8 +741,8 @@ refreshAll();
   if (!DATA.sample && !DATA.live) return;
   const age = DATA.loadedAt ? Date.now() - Date.parse(DATA.loadedAt) : Infinity;
   if (age < 20 * 60 * 1000) return;
-  const b = $('#banner'); b.classList.remove('hidden'); b.innerHTML = 'Loading <b>live NBA data</b>...';
-  doLive().then(() => { if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
+  const b = $('#banner'); b.classList.remove('hidden'); b.innerHTML = 'Loading <b>live data</b>...';
+  doLive().then(async () => { if (DATA.props.some(p => p.sport === 'NFL') && (!DATA.nflAt || Date.now() - Date.parse(DATA.nflAt) > 20 * 60 * 1000)) await doLiveNFL(); if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
 })();
 </script>
 </body>
