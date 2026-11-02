@@ -135,6 +135,9 @@ nav button.on{color:var(--green)}
     <section id="tab-picks" class="hidden">
     <div id="picksOut"></div>
   </section>
+  <section id="tab-results" class="hidden">
+    <div id="resultsOut"></div>
+  </section>
   <section id="tab-legend" class="hidden">
     <div class="card">
       <b>Reading a play card</b>
@@ -183,6 +186,16 @@ nav button.on{color:var(--green)}
       </p>
     </div>
     <div class="card">
+      <b>Results tab</b>
+      <p class="note" style="margin-top:6px">
+        Each time live data loads, the app saves the plays and the four suggested slips on your phone. After the games, it looks up the final box scores and records whether each play hit.<br>
+        <b>App said / Avg est / Actually hit:</b> when the app favored a side with that much confidence, how often it really hit. If "Actually hit" runs well below "Avg est", the estimates are too optimistic.<br>
+        <b>Value plays:</b> plays with an edge over 3%, with the win-loss record and units won or lost at a flat 1 unit per play.<br>
+        <b>Suggested slips:</b> how each slip did, leg by leg. A slip with a leg that didn't play or landed exactly on the line is voided.<br>
+        Results are stored only on this phone and kept for 3 weeks. Under about 100 finished plays, the numbers are mostly luck.
+      </p>
+    </div>
+    <div class="card">
       <b>Parlays</b>
       <p class="note" style="margin-top:6px">
         <b>Payout multiple:</b> what a winning parlay returns per 1 staked, including the stake.<br>
@@ -207,6 +220,7 @@ nav button.on{color:var(--green)}
   <button data-tab="player"><span>📈</span>Player</button>
   <button data-tab="picks"><span>🎯</span>Picks</button>
   <button data-tab="parlay"><span>🎟️</span>Parlay <b id="parlayCount"></b></button>
+  <button data-tab="results"><span>🏁</span>Results</button>
   <button data-tab="legend"><span>📖</span>Legend</button>
   <button data-tab="data"><span>⚙️</span>Data</button>
 </nav>
@@ -576,7 +590,7 @@ async function loadLive(setMsg) {
     const ij = inj[nk(p.name)] || '';
     if (/^(out|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n), tip: t.date, def: (g.stat === 'Points' || g.stat === 'Pts+Reb+Ast') && defs[t.opp] ? defs[t.opp] : null });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NBA', stat: g.stat, line: g.line, odds: g.o[0], oddsUnder: g.o[1], aid: g.id, live: true, inj: ij, open: g.open, ...liveCtx(p.rows, g.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: (tmOut[SLT[t.abbr] || t.abbr] || []).filter(x => nk(x.n) !== nk(p.name)).sort((a, b) => a.r - b.r).slice(0, 3).map(x => x.n), tip: t.date, def: (g.stat === 'Points' || g.stat === 'Pts+Reb+Ast') && defs[t.opp] ? defs[t.opp] : null });
     logs[p.name + '|' + g.stat] = p.rows.map(r => r[g.stat]);
   }
   if (!props.length) throw new Error('No props could be built.');
@@ -659,7 +673,7 @@ async function loadNFL(setMsg) {
     const ij = inj[nk(p.name)] || '';
     if (/^(out|inj|ir)/i.test(ij)) continue;
     const t = teams[p.tid] || { abbr: '', opp: '' };
-    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NFL', stat: x.stat, line: x.line, odds: -110, oddsUnder: -110, noOdds: true, live: true, inj: ij, open: x.open, ...liveCtx(vals, x.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: [], tip: t.date, def: null });
+    props.push({ player: p.name, team: t.abbr, opponent: t.opp, sport: 'NFL', stat: x.stat, line: x.line, odds: -110, oddsUnder: -110, noOdds: true, aid: x.id, live: true, inj: ij, open: x.open, ...liveCtx(vals, x.stat, t.date, t.home, t.opp), spread: t.spread, total: t.total, tm: [], tip: t.date, def: null });
     logs[p.name + '|' + x.stat] = vals.map(r => r[x.stat]);
   }
   if (!props.length) throw new Error('No NFL props could be built.');
@@ -723,19 +737,131 @@ function renderPicks() {
   el.innerHTML = html;
 }
 
+/* ---------- results tracker ---------- */
+const ymdL = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+const TRK_KEY = 'bangbus.track';
+let TRK = store.get(TRK_KEY) || { plays: {}, slips: {}, upd: null };
+if (!TRK.plays) TRK = { plays: {}, slips: {}, upd: null };
+function trkSave() { store.set(TRK_KEY, TRK); }
+function trkTick() {
+  if (!DATA.live) return;
+  const now = Date.now();
+  for (const r of buildBoard(DATA, 'over')) {
+    if (!r.aid || !r.tip || Date.parse(r.tip) <= now) continue;
+    const ou = r.oddsUnder || r.odds;
+    if (r.est - impliedProb(r.odds) <= 0 && (1 - r.est) - impliedProb(ou) <= 0) continue;
+    const k = r.aid + '|' + r.stat + '|' + r.tip;
+    if (TRK.plays[k] && TRK.plays[k].r) continue;
+    TRK.plays[k] = { p: r.player, s: r.stat, sp: r.sport, l: r.line, e: Math.round(r.est * 1000) / 1000, o: r.odds, u: ou, t: r.tip, a: r.aid, n: r.noOdds ? 1 : 0, v: null, r: 0 };
+  }
+  const day = ymdL(new Date());
+  for (const id in SLIPS) {
+    const legs = SLIPS[id]; if (!legs) continue;
+    const key = day + '|' + id, old = TRK.slips[key];
+    if (old && Math.min(...old.legs.map(l => Date.parse(l.t))) <= now) continue;
+    TRK.slips[key] = { day, id, legs: legs.map(l => ({ k: l.aid + '|' + l.stat + '|' + l.tip, p: l.player, s: l.stat, l: l.line, side: l.side, od: l.odds, t: l.tip })) };
+  }
+  const cut = now - 21 * 24 * 3600e3;
+  for (const k in TRK.plays) if (Date.parse(TRK.plays[k].t) < cut) delete TRK.plays[k];
+  for (const k in TRK.slips) if (Date.parse(TRK.slips[k].legs[0].t) < cut) delete TRK.slips[k];
+  trkSave();
+}
+let TRK_BUSY = false;
+async function resolvePending(manual) {
+  if (TRK_BUSY) return; TRK_BUSY = true;
+  const st = $('#resStatus'); if (manual && st) st.textContent = 'Checking final scores...';
+  let done = 0, err = '';
+  try {
+    const now = Date.now(), H = 3600e3, groups = {};
+    Object.values(TRK.plays).filter(e => !e.r && Date.parse(e.t) + 4 * H < now).forEach(e => { (groups[e.sp + '|' + e.a] = groups[e.sp + '|' + e.a] || []).push(e); });
+    await pool(Object.values(groups), 6, async list => {
+      const nfl = list[0].sp === 'NFL';
+      const g = await jget('https://site.web.api.espn.com/apis/common/v3/sports/' + (nfl ? 'football/nfl' : 'basketball/nba') + '/athletes/' + list[0].a + '/gamelog');
+      const rows = nfl ? nflRows(g) : gameRows(g);
+      for (const e of list) {
+        const row = rows.find(r => Math.abs(Date.parse(r.d) - Date.parse(e.t)) < 6 * H);
+        if (row && isFinite(row[e.s])) { e.v = row[e.s]; e.r = 1; done++; }
+        else if (Date.parse(e.t) + 30 * H < now) { e.v = null; e.r = 1; done++; }
+      }
+    });
+    TRK.upd = new Date().toISOString(); trkSave();
+  } catch (e) { err = e.message; }
+  TRK_BUSY = false; renderResults();
+  const st2 = $('#resStatus'); if (st2 && manual) st2.textContent = err ? 'Could not check: ' + err : done ? 'Updated ' + done + ' finished plays.' : 'No new finished games to check yet.';
+}
+function trkStats() {
+  const res = Object.values(TRK.plays).filter(e => e.r && e.v != null && e.v !== e.l), out = {};
+  for (const sp of ['NBA', 'NFL']) {
+    const ps = res.filter(e => e.sp === sp), bins = [[.5, .55], [.55, .6], [.6, .65], [.65, 1.01]].map(([lo, hi]) => ({ lo, hi, n: 0, est: 0, hit: 0 })), val = { n: 0, w: 0, u: 0 };
+    for (const e of ps) {
+      const overWon = e.v > e.l;
+      for (const side of ['o', 'u']) {
+        const est = side === 'o' ? e.e : 1 - e.e, odds = side === 'o' ? e.o : e.u, hit = (side === 'o') === overWon;
+        if (est >= .5) { const b = bins.find(b => est >= b.lo && est < b.hi); if (b) { b.n++; b.est += est; b.hit += hit ? 1 : 0; } }
+        if (est - impliedProb(odds) > .03) { val.n++; if (hit) { val.w++; val.u += payout(odds); } else val.u -= 1; }
+      }
+    }
+    out[sp] = { n: ps.length, bins, val };
+  }
+  return out;
+}
+function trkSlipStats() {
+  const stat = {}, recent = [];
+  for (const s of Object.values(TRK.slips)) {
+    const legs = s.legs.map(l => { const e = TRK.plays[l.k]; let res = 'pending'; if (e && e.r) res = (e.v == null || e.v === l.l) ? 'void' : ((l.side === 'over') === (e.v > l.l) ? 'win' : 'loss'); return { ...l, v: e ? e.v : null, res }; });
+    let res = 'pending';
+    if (legs.some(l => l.res === 'loss')) res = 'loss';
+    else if (legs.every(l => l.res !== 'pending')) res = legs.some(l => l.res === 'void') ? 'void' : 'win';
+    const dec = legs.reduce((m, l) => m * (1 + payout(l.od)), 1), o = stat[s.id] = stat[s.id] || { n: 0, w: 0, u: 0 };
+    if (res === 'win') { o.n++; o.w++; o.u += dec - 1; } else if (res === 'loss') { o.n++; o.u -= 1; }
+    recent.push({ ...s, legs, res, dec });
+  }
+  recent.sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : 0);
+  return { stat, recent };
+}
+function renderResults() {
+  const el = $('#resultsOut'); if (!el) return;
+  const T = trkStats(), SS = trkSlipStats(), all = Object.values(TRK.plays), fin = all.filter(e => e.r).length;
+  const u1 = u => (u >= 0 ? '+' : '') + u.toFixed(1) + 'u', pc = x => Math.round(x * 100) + '%';
+  const td = 'style="padding:5px 4px;border-top:1px solid var(--line)"';
+  let h = '<div class="card"><b>Results tracker</b><p class="note" style="margin-top:6px">Saves each day\'s plays before tip-off, then checks the final box scores to see how the estimates did. Tracking ' + all.length + ' plays, ' + fin + ' finished.' + (TRK.upd ? ' Last checked ' + new Date(TRK.upd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.' : '') + '</p><p style="margin:12px 0 0"><button class="btn" id="resUpdate">Check results now</button></p><p class="note" id="resStatus"></p></div>';
+  for (const sp of ['NBA', 'NFL']) {
+    const t = T[sp]; if (!t.n) continue;
+    h += '<div class="card"><b>' + sp + ': how the estimates did</b><p class="note" style="margin-top:6px">' + t.n + ' finished plays. When the app favors a side, how often did that side hit?</p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tr style="color:var(--mute);text-align:left"><th>App said</th><th>Plays</th><th>Avg est</th><th>Actually hit</th></tr>' +
+      t.bins.map(b => '<tr><td ' + td + '>' + Math.round(b.lo * 100) + (b.hi > 1 ? '%+' : '-' + Math.round(b.hi * 100) + '%') + '</td><td ' + td + '>' + b.n + '</td><td ' + td + '>' + (b.n ? pc(b.est / b.n) : '–') + '</td><td ' + td + '><b>' + (b.n ? pc(b.hit / b.n) : '–') + '</b></td></tr>').join('') + '</table>' +
+      '<p class="note">Value plays (edge over 3%): <b>' + t.val.w + '-' + (t.val.n - t.val.w) + '</b>' + (t.val.n ? ' (' + pc(t.val.w / t.val.n) + ')' : '') + ', ' + u1(t.val.u) + ' at a flat 1 unit per play' + (sp === 'NFL' ? ' (NFL prices are assumed -110)' : '') + '.</p>' +
+      (t.n < 100 ? '<p class="note">Under about 100 finished plays, results are mostly luck. Keep checking back.</p>' : '') + '</div>';
+  }
+  const names = { '3edge': '3-leg best value', '3safe': '3-leg safest', '4edge': '4-leg best value', '4safe': '4-leg safest' };
+  const ids = Object.keys(names).filter(i => SS.stat[i] && SS.stat[i].n);
+  if (ids.length) h += '<div class="card"><b>Suggested slips</b>' + ids.map(i => '<p class="note" style="margin:6px 0 0"><b>' + names[i] + ':</b> ' + SS.stat[i].w + ' of ' + SS.stat[i].n + ' won, ' + u1(SS.stat[i].u) + ' at 1 unit per slip.</p>').join('') + '</div>';
+  SS.recent.slice(0, 8).forEach(s => {
+    const tag = { win: 'WON', loss: 'LOST', void: 'VOID', pending: 'PENDING' }[s.res], col = s.res === 'win' ? 'var(--green)' : s.res === 'loss' ? 'var(--red)' : 'var(--mute)';
+    const d = s.day.slice(4, 6) + '/' + s.day.slice(6, 8);
+    h += '<div class="card"><div class="pick" style="font-size:15px">' + d + ' · ' + names[s.id] + ' <span style="color:' + col + '">' + tag + '</span></div>' +
+      s.legs.map(l => '<div class="meta" style="margin-top:6px">' + ({ win: '✓', loss: '✗', void: '–', pending: '…' }[l.res]) + ' ' + esc(l.p) + ' ' + l.side.toUpperCase() + ' ' + l.l + ' ' + esc(l.s) + (l.v != null ? ' → ' + l.v : '') + '</div>').join('') + '</div>';
+  });
+  if (!all.length) h += '<p class="note">Nothing saved yet. The app saves plays each time live data loads.</p>';
+  else if (!fin) h += '<p class="note">Nothing has finished yet. Come back after tonight\'s games and tap Check results now.</p>';
+  h += '<p><button class="btn ghost" id="resClear">Clear results history</button></p>';
+  el.innerHTML = h;
+}
+
 /* ---------- wiring ---------- */
 function showTab(t) {
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + t));
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   if (t === 'parlay') renderParlay();
   if (t === 'picks') renderPicks();
+  if (t === 'results') renderResults();
   window.scrollTo(0, 0);
 }
 function refreshAll() {
   const b = $('#banner');
   b.classList.toggle('hidden', !DATA.sample && !DATA.live);
   b.innerHTML = DATA.live ? 'Showing <b>live data</b> (ESPN / DraftKings). NBA over/under odds order unverified. NFL odds are assumed -110 (marked *).' : 'Showing <b>sample (fake) data</b>. Load your own CSVs in the Data tab.';
-  renderChips(); renderBoard(); fillPlayers(); renderParlay(); renderPicks();
+  renderChips(); renderBoard(); fillPlayers(); renderParlay(); renderPicks(); trkTick(); renderResults();
 }
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
@@ -749,6 +875,8 @@ document.addEventListener('click', e => {
   else if (t.id === 'loadBtn') loadFiles();
   else if (t.id === 'liveBtn') doLive();
   else if (t.id === 'nflBtn') doLiveNFL();
+  else if (t.id === 'resUpdate') resolvePending(true);
+  else if (t.id === 'resClear') { if (confirm('Clear all saved results?')) { TRK = { plays: {}, slips: {}, upd: null }; trkSave(); renderResults(); } }
   else if (t.dataset.slip) { const legs = SLIPS[t.dataset.slip]; if (legs) { S.parlay = legs.map(l => l.key + '|' + l.side); store.set('propmate.parlay', S.parlay); renderBoard(); showTab('parlay'); } }
   else if (t.id === 'resetBtn') { store.del('propmate.data'); store.del('propmate.parlay'); DATA = sampleData(); S.parlay = []; S.sports = null; $('#dataMsg').textContent = 'Back on sample data.'; refreshAll(); }
 });
@@ -768,6 +896,7 @@ refreshAll();
   const b = $('#banner'); b.classList.remove('hidden'); b.innerHTML = 'Loading <b>live data</b>...';
   doLive().then(async () => { if (!DATA.nflAt || Date.now() - Date.parse(DATA.nflAt) > 20 * 60 * 1000) await doLiveNFL(); if (DATA.sample || !DATA.live) { b.classList.remove('hidden'); b.innerHTML = 'Could not load live data (' + ($('#liveMsg').textContent || 'unknown') + '). Showing ' + (DATA.sample ? 'sample data' : 'last saved data') + '.'; } });
 })();
+setTimeout(() => resolvePending(false), 2500);
 </script>
 </body>
 </html>
