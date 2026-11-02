@@ -172,6 +172,7 @@ nav button.on{color:var(--green)}
         <b>Home 22.1 · Away 18.4 avg:</b> his average for this stat at home vs on the road. Tonight's venue is bold. Needs 3 or more games each way.<br>
         <b>vs ORL 21.0 avg in 3 games:</b> his average against tonight's opponent, shown with 2 or more games, next to his overall average.<br>
         <b>Spread -3.5 · Total 220.5:</b> the game line from his team's side. Minus means his team is favored. A spread of 10 or more shows Blowout risk, since starters may sit late.<br>
+        <b>Starter role / Rotation / Bench role:</b> a guess from his average minutes (28+ = starter, 20-28 = rotation, under 20 = bench). Free data does not include official lineups, so this is an estimate, not a confirmed starter.<br>
         <b>Teammates out:</b> notable teammates ruled out tonight. Their shots and minutes often go to others.<br>
         <b>Opp allows 124.0 PPG · Soft D:</b> points per game tonight's opponent gives up (points and pts+reb+ast plays only). Early in the season it also shows last year's number. Soft D means one of the 8 most generous defenses, Tough D one of the 8 stingiest. This is a blend of this season and last, and it does not adjust for the opponent's schedule.
       </p>
@@ -524,6 +525,7 @@ function liveCtx(rows, stat, tonight, home, opp) {
 }
 function ctxHtml(p) {
   const f = x => typeof x === 'number' && isFinite(x), bits = [];
+  if (f(p.minAvg) && p.sport !== 'NFL') { const ma = p.minAvg, role = ma >= 28 ? 'Starter role' : ma >= 20 ? 'Rotation' : 'Bench role'; bits.push('<span style="color:' + (ma >= 28 ? '#34d399' : ma < 20 ? '#fbbf24' : 'inherit') + '">' + role + ' (' + ma.toFixed(0) + ' min)</span>'); }
   if (f(p.minL5) && f(p.minAvg)) { const d = p.minL5 - p.minAvg, c = d <= -3 ? '#f87171' : d >= 3 ? '#34d399' : 'inherit'; bits.push('<span style="color:' + c + '">Min L5 ' + p.minL5.toFixed(1) + ' vs ' + p.minAvg.toFixed(1) + ' avg</span>'); }
   if (f(p.adj) && Math.abs(p.adj) >= .005) bits.push('Est. ' + (p.adj > 0 ? '+' : '−') + (Math.abs(p.adj) * 100).toFixed(1) + '% for minutes');
   if (f(p.open) && p.open !== p.line) bits.push('Line ' + p.open + ' → ' + p.line + (p.line > p.open ? ' ▲' : ' ▼'));
